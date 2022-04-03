@@ -13,11 +13,14 @@ pub struct EncryptedRecord<'aad> {
     pub ciphertext: Vec<u8>,
     pub encrypted_key: Vec<u8>,
     pub nonce: Nonce<U12>,
-    pub aad: &'aad [u8],
+    pub aad: &'aad [u8], // FIXME: Just call this the key_id to keep it simple
 }
 
 #[derive(Debug)]
 pub struct EncryptionError;
+
+#[derive(Debug)]
+pub struct DecryptionError;
 
 pub struct EnvelopeCipher<K, R = ChaChaRng>
 where
@@ -40,6 +43,24 @@ where
         }
     }
 
+    pub fn decrypt(&self, encrypted_record: EncryptedRecord) -> Result<Vec<u8>, DecryptionError> {
+        let key = self
+            .key_provider
+            .decrypt_data_key(encrypted_record.encrypted_key)
+            .map_err(|_| DecryptionError)?;
+        let aad = encrypted_record.aad;
+        let msg = encrypted_record.ciphertext.as_ref();
+        let payload = Payload { msg, aad };
+
+        let cipher = Aes128Gcm::new(&key);
+        let message = cipher
+            .decrypt(&encrypted_record.nonce, payload)
+            .map_err(|_| DecryptionError)?;
+
+        return Ok(message);
+    }
+
+    // TODO: Maybe this should take a vec as well??
     pub fn encrypt(&self, msg: &[u8]) -> Result<EncryptedRecord, EncryptionError> {
         let mut nonce: Nonce<U12> = Default::default();
         let data_key = self
