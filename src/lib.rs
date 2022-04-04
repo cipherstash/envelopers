@@ -31,7 +31,7 @@
 //! # use hex_literal::hex;
 //! # let kek: [u8; 16] = hex!("00010203 04050607 08090a0b 0c0d0e0f");
 //! # let key_provider = SimpleKeyProvider::init(kek);
-//! # 
+//! #
 //! # let cipher: EnvelopeCipher<SimpleKeyProvider> = EnvelopeCipher::init(key_provider);
 //! # let er = cipher.encrypt(b"hey there monkey boy").unwrap();
 //!
@@ -46,7 +46,7 @@
 //! # use hex_literal::hex;
 //! # let kek: [u8; 16] = hex!("00010203 04050607 08090a0b 0c0d0e0f");
 //! # let key_provider = SimpleKeyProvider::init(kek);
-//! # 
+//! #
 //! # let cipher: EnvelopeCipher<SimpleKeyProvider> = EnvelopeCipher::init(key_provider);
 //! # let er = cipher.encrypt(b"hey there monkey boy").unwrap();
 //! # let bytes = er.to_vec().unwrap();
@@ -65,8 +65,8 @@ use aes_gcm::aead::{Aead, NewAead, Payload};
 use aes_gcm::{Aes128Gcm, Key, Nonce}; // Or `Aes256Gcm`
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
+use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
-use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EncryptedRecord {
@@ -121,7 +121,10 @@ where
 
         let aad = encrypted_record.key_id;
         let msg = encrypted_record.ciphertext.as_ref();
-        let payload = Payload { msg, aad: &aad.as_bytes() };
+        let payload = Payload {
+            msg,
+            aad: &aad.as_bytes(),
+        };
 
         let cipher = Aes128Gcm::new(&key);
         let message = cipher
@@ -145,7 +148,10 @@ where
             .try_fill_bytes(&mut nonce_data)
             .map_err(|_| EncryptionError)?;
 
-        let payload = Payload { msg, aad: key_id.as_bytes() };
+        let payload = Payload {
+            msg,
+            aad: key_id.as_bytes(),
+        };
 
         let nonce = Nonce::from_slice(&nonce_data);
 
