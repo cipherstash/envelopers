@@ -1,3 +1,5 @@
+//! Trait for a KeyProvider
+
 use aes_gcm::aead::{Aead, NewAead, Payload};
 use aes_gcm::aes::cipher::consts::U16;
 use aes_gcm::{Aes128Gcm, Key, Nonce}; // Or `Aes256Gcm`
@@ -6,11 +8,11 @@ use rand_chacha::ChaChaRng;
 use std::cell::RefCell;
 
 #[derive(Debug)]
-pub struct DataKey<'keyid> {
-    //pub key: [u8; 16], // TODO: Maybe make types for these Key and EncryptedKey (steal from AES crate?)
+pub struct DataKey {
     pub key: Key<U16>,
+    // TODO: Maybe make a type for EncryptedKey
     pub encrypted_key: Vec<u8>,
-    pub key_id: &'keyid str,
+    pub key_id: String,
 }
 
 #[derive(Debug)]
@@ -21,7 +23,7 @@ pub struct KeyDecryptionError;
 
 pub trait KeyProvider {
     fn generate_data_key(&self) -> Result<DataKey, KeyGenerationError>;
-    fn decrypt_data_key(&self, encrypted_key: Vec<u8>) -> Result<Key<U16>, KeyDecryptionError>;
+    fn decrypt_data_key(&self, encrypted_key: &Vec<u8>) -> Result<Key<U16>, KeyDecryptionError>;
 }
 
 #[derive(Debug)]
@@ -40,14 +42,14 @@ impl<R: SeedableRng + RngCore> SimpleKeyProvider<R> {
 }
 
 impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
-    fn decrypt_data_key(&self, encrypted_key: Vec<u8>) -> Result<Key<U16>, KeyDecryptionError> {
+    fn decrypt_data_key(&self, encrypted_key: &Vec<u8>) -> Result<Key<U16>, KeyDecryptionError> {
         let key = Key::from_slice(&self.kek);
         let cipher = Aes128Gcm::new(key);
 
         // FIXME: Don't use a fixed nonce
         let nonce = Nonce::from_slice(b"unique bonce");
         let data_key = cipher
-            .decrypt(nonce, encrypted_key.as_ref())
+            .decrypt(nonce, Payload { msg: encrypted_key, aad: b""})
             .map_err(|_| KeyDecryptionError)?;
 
         return Ok(*Key::from_slice(&data_key));
@@ -77,7 +79,7 @@ impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
         return Ok(DataKey {
             key: data_key,
             encrypted_key: ciphertext,
-            key_id: &"simplekey",
+            key_id: String::from("simplekey"),
         });
     }
 }
