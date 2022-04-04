@@ -71,7 +71,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "envelope"
+name = "enveloper"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
