@@ -49,7 +49,13 @@ impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
         // FIXME: Don't use a fixed nonce
         let nonce = Nonce::from_slice(b"unique bonce");
         let data_key = cipher
-            .decrypt(nonce, Payload { msg: encrypted_key, aad: b""})
+            .decrypt(
+                nonce,
+                Payload {
+                    msg: encrypted_key,
+                    aad: b"",
+                },
+            )
             .map_err(|_| KeyDecryptionError)?;
 
         return Ok(*Key::from_slice(&data_key));
