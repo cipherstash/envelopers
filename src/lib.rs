@@ -1,3 +1,63 @@
+//! envelope is a very simple, envelope encryption library that can use external key providers such
+//! as AWS KMS to encrypt data safely. It uses the concept of data-keys to encrypt messages but
+//! these data keys are themselves encrypted by a Key-Encryption-Key (or KEK, sometimes also called
+//! Customer Master Key) with the resulting ciphertext stored with the encrypted data (the
+//! "wrapped" data-key).
+//!
+//! # Usage
+//!
+//! **NOTE: This is Alpha software and should not be used in production**
+//!
+//! ## Encrypt a message with a local Key Provider
+//!
+//! The `SimpleKeyProvider` allows envelope encryption to be used with a local key.
+//!
+//! ```rust
+//! use envelope::{EnvelopeCipher, SimpleKeyProvider};
+//!
+//! use hex_literal::hex;
+//! let kek: [u8; 16] = hex!("00010203 04050607 08090a0b 0c0d0e0f");
+//! let key_provider = SimpleKeyProvider::init(kek);
+//!
+//! let cipher: EnvelopeCipher<SimpleKeyProvider> = EnvelopeCipher::init(key_provider);
+//! let er = cipher.encrypt(b"hey there monkey boy").unwrap();
+//! ```
+//!
+//! ## Encoding a CipherText
+//!
+//! ```rust
+//! # use envelope::{EnvelopeCipher, SimpleKeyProvider};
+//! #
+//! # use hex_literal::hex;
+//! # let kek: [u8; 16] = hex!("00010203 04050607 08090a0b 0c0d0e0f");
+//! # let key_provider = SimpleKeyProvider::init(kek);
+//! # 
+//! # let cipher: EnvelopeCipher<SimpleKeyProvider> = EnvelopeCipher::init(key_provider);
+//! # let er = cipher.encrypt(b"hey there monkey boy").unwrap();
+//!
+//! let bytes = er.to_vec().unwrap();
+//! hex::encode(&bytes);
+//! ```
+//!
+//! ## Decrypting a CipherText
+//! ```rust
+//! use envelope::{EnvelopeCipher, SimpleKeyProvider, EncryptedRecord};
+//! #
+//! # use hex_literal::hex;
+//! # let kek: [u8; 16] = hex!("00010203 04050607 08090a0b 0c0d0e0f");
+//! # let key_provider = SimpleKeyProvider::init(kek);
+//! # 
+//! # let cipher: EnvelopeCipher<SimpleKeyProvider> = EnvelopeCipher::init(key_provider);
+//! # let er = cipher.encrypt(b"hey there monkey boy").unwrap();
+//! # let bytes = er.to_vec().unwrap();
+//! # hex::encode(&bytes);
+//!
+//! let dec = EncryptedRecord::from_vec(bytes).unwrap();
+//! let pt = cipher.decrypt(dec).unwrap();
+//!
+//! assert!(std::str::from_utf8(&pt).unwrap() == "hey there monkey boy");
+//! ```
+
 mod key_provider;
 pub use crate::key_provider::KeyProvider;
 pub use crate::key_provider::SimpleKeyProvider;
