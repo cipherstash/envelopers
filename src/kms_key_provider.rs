@@ -40,7 +40,7 @@ impl AsyncKeyProvider for KMSKeyProvider {
             .key_spec(self.data_key_spec.clone())
             .send()
             .await
-            .map_err(|e| KeyGenerationError::Other(format!("{}", e)))?;
+            .map_err(|e| KeyGenerationError::Other(e.to_string()))?;
 
         let encrypted_key = response
             .ciphertext_blob
@@ -77,7 +77,7 @@ impl AsyncKeyProvider for KMSKeyProvider {
             .ciphertext_blob(Blob::new(encrypted_key.clone()))
             .send()
             .await
-            .map_err(|e| KeyDecryptionError::Other(format!("{}", e)))?;
+            .map_err(|e| KeyDecryptionError::Other(e.to_string()))?;
 
         let plaintext_blob = response.plaintext().ok_or_else(|| {
             KeyDecryptionError::Other(String::from("Response did not contain plaintext key"))
