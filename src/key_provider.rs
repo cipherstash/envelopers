@@ -3,11 +3,13 @@
 use aes_gcm::aead::{Aead, NewAead, Payload};
 use aes_gcm::aes::cipher::consts::U16;
 use aes_gcm::{Aes128Gcm, Key, Nonce}; // Or `Aes256Gcm`
+use async_trait::async_trait;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::cell::RefCell;
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
+use crate::AsyncKeyProvider;
 
 #[derive(Debug)]
 pub struct DataKey {
@@ -77,5 +79,19 @@ impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
             encrypted_key: ciphertext,
             key_id: String::from("simplekey"),
         });
+    }
+}
+
+#[async_trait(?Send)]
+impl AsyncKeyProvider for dyn KeyProvider {
+    async fn generate_data_key(&self) -> Result<DataKey, KeyGenerationError> {
+        KeyProvider::generate_data_key(self)
+    }
+
+    async fn decrypt_data_key(
+        &self,
+        encrypted_key: &Vec<u8>,
+    ) -> Result<Key<U16>, KeyDecryptionError> {
+        KeyProvider::decrypt_data_key(self, encrypted_key)
     }
 }
