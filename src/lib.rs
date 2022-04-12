@@ -61,10 +61,20 @@
 mod errors;
 mod key_provider;
 
+mod async_key_provider;
+mod kms_key_provider;
+
 pub use crate::key_provider::KeyProvider;
 pub use crate::key_provider::SimpleKeyProvider;
+
+pub use crate::async_key_provider::AsyncKeyProvider;
+pub use crate::kms_key_provider::KMSKeyProvider;
+
+use aes_gcm::aead::consts::U16;
 use aes_gcm::aead::{Aead, NewAead, Payload};
-use aes_gcm::{Aes128Gcm, Key, Nonce}; // Or `Aes256Gcm`
+use aes_gcm::{Aes128Gcm, Key, Nonce};
+use key_provider::DataKey;
+// Or `Aes256Gcm`
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use serde::{Deserialize, Serialize};
@@ -92,7 +102,6 @@ impl EncryptedRecord {
 
 pub struct EnvelopeCipher<K, R = ChaChaRng>
 where
-    K: KeyProvider,
     R: SeedableRng + RngCore,
 {
     pub key_provider: K,
@@ -101,7 +110,6 @@ where
 
 impl<K, R> EnvelopeCipher<K, R>
 where
-    K: KeyProvider,
     R: SeedableRng + RngCore,
 {
     pub fn init(key_provider: K) -> Self {
@@ -111,11 +119,11 @@ where
         }
     }
 
-    pub fn decrypt(&self, encrypted_record: EncryptedRecord) -> Result<Vec<u8>, DecryptionError> {
-        let key = self
-            .key_provider
-            .decrypt_data_key(encrypted_record.encrypted_key.as_ref())?;
-
+    fn decrypt_with_key(
+        &self,
+        key: Key<U16>,
+        encrypted_record: EncryptedRecord,
+    ) -> Result<Vec<u8>, DecryptionError> {
         let aad = encrypted_record.key_id;
         let msg = encrypted_record.ciphertext.as_ref();
         let payload = Payload {
@@ -129,10 +137,12 @@ where
         return Ok(message);
     }
 
-    pub fn encrypt(&self, msg: &[u8]) -> Result<EncryptedRecord, EncryptionError> {
+    fn encrypt_with_data_key(
+        &self,
+        data_key: DataKey,
+        msg: &[u8],
+    ) -> Result<EncryptedRecord, EncryptionError> {
         let mut nonce_data = [0u8; 12];
-        let data_key = self.key_provider.generate_data_key()?;
-
         let key_id = data_key.key_id;
 
         self.rng.borrow_mut().try_fill_bytes(&mut nonce_data)?;
@@ -155,5 +165,51 @@ where
             encrypted_key: data_key.encrypted_key,
             key_id,
         });
+    }
+}
+
+impl<K, R> EnvelopeCipher<K, R>
+where
+    K: AsyncKeyProvider,
+    R: SeedableRng + RngCore,
+{
+    pub async fn decrypt(
+        &self,
+        encrypted_record: EncryptedRecord,
+    ) -> Result<Vec<u8>, DecryptionError> {
+        let key = self
+            .key_provider
+            .decrypt_data_key(encrypted_record.encrypted_key.as_ref())
+            .await?;
+
+        self.decrypt_with_key(key, encrypted_record)
+    }
+
+    pub async fn encrypt(&self, msg: &[u8]) -> Result<EncryptedRecord, EncryptionError> {
+        let data_key = self.key_provider.generate_data_key().await?;
+        self.encrypt_with_data_key(data_key, msg)
+    }
+}
+
+impl<K, R> EnvelopeCipher<K, R>
+where
+    K: KeyProvider,
+    R: SeedableRng + RngCore,
+{
+    pub fn decrypt_sync(
+        &self,
+        encrypted_record: EncryptedRecord,
+    ) -> Result<Vec<u8>, DecryptionError> {
+        let key = self
+            .key_provider
+            .decrypt_data_key(encrypted_record.encrypted_key.as_ref())?;
+
+        self.decrypt_with_key(key, encrypted_record)
+    }
+
+    pub fn encrypt_sync(&self, msg: &[u8]) -> Result<EncryptedRecord, EncryptionError> {
+        let data_key = self.key_provider.generate_data_key()?;
+
+        self.encrypt_with_data_key(data_key, msg)
     }
 }
