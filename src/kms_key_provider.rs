@@ -11,15 +11,22 @@ use aes_gcm::Key;
 
 pub struct KMSKeyProvider {
     key_id: String,
+    data_key_spec: DataKeySpec,
     client: Client,
 }
 
 impl KMSKeyProvider {
-    pub fn new(client: Client, key_id: impl Into<String>) -> Self {
+    pub fn new(client: Client, key_id: String) -> Self {
         Self {
             client,
-            key_id: key_id.into(),
+            data_key_spec: DataKeySpec::Aes128,
+            key_id
         }
+    }
+
+    pub fn with_spec(mut self, spec: DataKeySpec) -> Self {
+        self.data_key_spec = spec;
+        self
     }
 }
 
@@ -30,7 +37,7 @@ impl AsyncKeyProvider for KMSKeyProvider {
             .client
             .generate_data_key()
             .key_id(&self.key_id)
-            .key_spec(DataKeySpec::Aes128)
+            .key_spec(self.data_key_spec.clone())
             .send()
             .await
             .map_err(|e| KeyGenerationError::Other(format!("{}", e)))?;
@@ -70,7 +77,7 @@ impl AsyncKeyProvider for KMSKeyProvider {
             .ciphertext_blob(Blob::new(encrypted_key.clone()))
             .send()
             .await
-            .map_err(|e| KeyDecryptionError::Other(format!("{}", e)));
+            .map_err(|e| KeyDecryptionError::Other(format!("{}", e)))?;
 
         let plaintext_blob = response.plaintext().ok_or_else(|| {
             KeyDecryptionError::Other(String::from("Response did not contain plaintext key"))
