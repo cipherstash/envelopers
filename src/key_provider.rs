@@ -7,6 +7,8 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::cell::RefCell;
 
+use crate::errors::{KeyDecryptionError, KeyGenerationError};
+
 #[derive(Debug)]
 pub struct DataKey {
     pub key: Key<U16>,
@@ -14,12 +16,6 @@ pub struct DataKey {
     pub encrypted_key: Vec<u8>,
     pub key_id: String,
 }
-
-#[derive(Debug)]
-pub struct KeyGenerationError;
-
-#[derive(Debug)]
-pub struct KeyDecryptionError;
 
 pub trait KeyProvider {
     fn generate_data_key(&self) -> Result<DataKey, KeyGenerationError>;
@@ -48,15 +44,13 @@ impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
 
         // FIXME: Don't use a fixed nonce
         let nonce = Nonce::from_slice(b"unique bonce");
-        let data_key = cipher
-            .decrypt(
-                nonce,
-                Payload {
-                    msg: encrypted_key,
-                    aad: b"",
-                },
-            )
-            .map_err(|_| KeyDecryptionError)?;
+        let data_key = cipher.decrypt(
+            nonce,
+            Payload {
+                msg: encrypted_key,
+                aad: b"",
+            },
+        )?;
 
         return Ok(*Key::from_slice(&data_key));
     }
@@ -66,10 +60,7 @@ impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
         let cipher = Aes128Gcm::new(key);
         let mut data_key: Key<U16> = Default::default();
 
-        self.rng
-            .borrow_mut()
-            .try_fill_bytes(&mut data_key)
-            .map_err(|_| KeyGenerationError)?;
+        self.rng.borrow_mut().try_fill_bytes(&mut data_key)?;
 
         // FIXME: Don't use a fixed nonce
         let nonce = Nonce::from_slice(b"unique bonce");
@@ -78,9 +69,8 @@ impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
             msg: &data_key,
             aad: b"",
         };
-        let ciphertext = cipher
-            .encrypt(nonce, payload)
-            .map_err(|_| KeyGenerationError)?;
+
+        let ciphertext = cipher.encrypt(nonce, payload)?;
 
         return Ok(DataKey {
             key: data_key,

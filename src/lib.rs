@@ -58,7 +58,9 @@
 //! assert!(std::str::from_utf8(&pt).unwrap() == "hey there monkey boy");
 //! ```
 
+mod errors;
 mod key_provider;
+
 pub use crate::key_provider::KeyProvider;
 pub use crate::key_provider::SimpleKeyProvider;
 use aes_gcm::aead::{Aead, NewAead, Payload};
@@ -67,6 +69,8 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
+
+use errors::{DecryptionError, EncryptionError};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EncryptedRecord {
@@ -85,12 +89,6 @@ impl EncryptedRecord {
         serde_cbor::from_slice(&vec[..])
     }
 }
-
-#[derive(Debug)]
-pub struct EncryptionError;
-
-#[derive(Debug)]
-pub struct DecryptionError;
 
 pub struct EnvelopeCipher<K, R = ChaChaRng>
 where
@@ -116,8 +114,7 @@ where
     pub fn decrypt(&self, encrypted_record: EncryptedRecord) -> Result<Vec<u8>, DecryptionError> {
         let key = self
             .key_provider
-            .decrypt_data_key(encrypted_record.encrypted_key.as_ref())
-            .map_err(|_| DecryptionError)?;
+            .decrypt_data_key(encrypted_record.encrypted_key.as_ref())?;
 
         let aad = encrypted_record.key_id;
         let msg = encrypted_record.ciphertext.as_ref();
@@ -127,26 +124,18 @@ where
         };
 
         let cipher = Aes128Gcm::new(&key);
-        let message = cipher
-            .decrypt(&Nonce::from_slice(&encrypted_record.nonce), payload)
-            .map_err(|_| DecryptionError)?;
+        let message = cipher.decrypt(&Nonce::from_slice(&encrypted_record.nonce), payload)?;
 
         return Ok(message);
     }
 
     pub fn encrypt(&self, msg: &[u8]) -> Result<EncryptedRecord, EncryptionError> {
         let mut nonce_data = [0u8; 12];
-        let data_key = self
-            .key_provider
-            .generate_data_key()
-            .map_err(|_| EncryptionError)?;
+        let data_key = self.key_provider.generate_data_key()?;
 
         let key_id = data_key.key_id;
 
-        self.rng
-            .borrow_mut()
-            .try_fill_bytes(&mut nonce_data)
-            .map_err(|_| EncryptionError)?;
+        self.rng.borrow_mut().try_fill_bytes(&mut nonce_data)?;
 
         let payload = Payload {
             msg,
@@ -158,9 +147,7 @@ where
         // TODO: Use Zeroize for the drop
         let key = Key::from_slice(&data_key.key);
         let cipher = Aes128Gcm::new(key);
-        let ciphertext = cipher
-            .encrypt(&nonce, payload)
-            .map_err(|_| EncryptionError)?;
+        let ciphertext = cipher.encrypt(&nonce, payload)?;
 
         return Ok(EncryptedRecord {
             ciphertext,
