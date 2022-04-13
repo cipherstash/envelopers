@@ -47,12 +47,14 @@ impl From<aead::Error> for DecryptionError {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum KeyGenerationError {
     #[error("failed to generate random bytes")]
     RngGeneration(#[from] rand::Error),
     #[error("failed to encrypt key payload")]
     AesEncryption,
+    #[error("{0}")]
+    Other(String),
     #[error("an unknown key generation error ocurred")]
     Unknown,
 }
@@ -73,6 +75,8 @@ impl Default for KeyGenerationError {
 pub enum KeyDecryptionError {
     #[error("failed to decrypt key")]
     AesDecryption,
+    #[error("{0}")]
+    Other(String),
     #[error("an unknown key decryption error ocurred")]
     Unknown,
 }
