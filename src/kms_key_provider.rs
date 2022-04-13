@@ -3,9 +3,8 @@ use aws_sdk_kms::model::DataKeySpec;
 use aws_sdk_kms::types::Blob;
 use aws_sdk_kms::Client;
 
-use crate::async_key_provider::AsyncKeyProvider;
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
-use crate::key_provider::DataKey;
+use crate::key_provider::{DataKey, KeyProvider};
 use aes_gcm::aes::cipher::consts::U16;
 use aes_gcm::Key;
 
@@ -20,7 +19,7 @@ impl KMSKeyProvider {
         Self {
             client,
             data_key_spec: DataKeySpec::Aes128,
-            key_id
+            key_id,
         }
     }
 
@@ -31,7 +30,7 @@ impl KMSKeyProvider {
 }
 
 #[async_trait(?Send)]
-impl AsyncKeyProvider for KMSKeyProvider {
+impl KeyProvider for KMSKeyProvider {
     async fn generate_data_key(&self) -> Result<DataKey, KeyGenerationError> {
         let mut response = self
             .client

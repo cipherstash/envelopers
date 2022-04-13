@@ -61,14 +61,13 @@
 mod errors;
 mod key_provider;
 
-mod async_key_provider;
 mod kms_key_provider;
+mod simple_key_provider;
 
 pub use crate::key_provider::KeyProvider;
-pub use crate::key_provider::SimpleKeyProvider;
 
-pub use crate::async_key_provider::AsyncKeyProvider;
 pub use crate::kms_key_provider::KMSKeyProvider;
+pub use crate::simple_key_provider::SimpleKeyProvider;
 
 use aes_gcm::aead::consts::U16;
 use aes_gcm::aead::{Aead, NewAead, Payload};
@@ -170,7 +169,7 @@ where
 
 impl<K, R> EnvelopeCipher<K, R>
 where
-    K: AsyncKeyProvider,
+    K: KeyProvider,
     R: SeedableRng + RngCore,
 {
     pub async fn decrypt(
@@ -187,29 +186,6 @@ where
 
     pub async fn encrypt(&self, msg: &[u8]) -> Result<EncryptedRecord, EncryptionError> {
         let data_key = self.key_provider.generate_data_key().await?;
-        self.encrypt_with_data_key(data_key, msg)
-    }
-}
-
-impl<K, R> EnvelopeCipher<K, R>
-where
-    K: KeyProvider,
-    R: SeedableRng + RngCore,
-{
-    pub fn decrypt_sync(
-        &self,
-        encrypted_record: EncryptedRecord,
-    ) -> Result<Vec<u8>, DecryptionError> {
-        let key = self
-            .key_provider
-            .decrypt_data_key(encrypted_record.encrypted_key.as_ref())?;
-
-        self.decrypt_with_key(key, encrypted_record)
-    }
-
-    pub fn encrypt_sync(&self, msg: &[u8]) -> Result<EncryptedRecord, EncryptionError> {
-        let data_key = self.key_provider.generate_data_key()?;
-
         self.encrypt_with_data_key(data_key, msg)
     }
 }
