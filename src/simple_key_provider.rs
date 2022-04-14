@@ -72,3 +72,43 @@ impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use tokio;
+
+    use crate::{key_provider::DataKey, KeyProvider, SimpleKeyProvider};
+
+    #[tokio::test]
+    async fn test_generate_decrypt_data_key() {
+        let provider: SimpleKeyProvider =
+            SimpleKeyProvider::init([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+
+        let DataKey {
+            encrypted_key, key, ..
+        } = provider.generate_data_key().await.unwrap();
+
+        assert_eq!(
+            key,
+            provider.decrypt_data_key(&encrypted_key).await.unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_fails_on_invalid_data_key() {
+        let first: SimpleKeyProvider = SimpleKeyProvider::init([0; 16]);
+
+        let second: SimpleKeyProvider = SimpleKeyProvider::init([1; 16]);
+
+        let DataKey { encrypted_key, .. } = first.generate_data_key().await.unwrap();
+
+        assert_eq!(
+            second
+                .decrypt_data_key(&encrypted_key)
+                .await
+                .map_err(|e| e.to_string())
+                .expect_err("Decrypting data key suceeded"),
+            "failed to decrypt key"
+        );
+    }
+}
