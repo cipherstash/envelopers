@@ -13,50 +13,70 @@
 //! The `SimpleKeyProvider` allows envelope encryption to be used with a local key.
 //!
 //! ```rust
-//! use envelope::{EnvelopeCipher, SimpleKeyProvider};
+//! use enveloper::{EnvelopeCipher, SimpleKeyProvider};
 //!
+//! # use tokio::runtime::Runtime;
+//! # let rt = Runtime::new().unwrap();
+//! # rt.block_on(async {
+//! #
 //! use hex_literal::hex;
 //! let kek: [u8; 16] = hex!("00010203 04050607 08090a0b 0c0d0e0f");
 //! let key_provider = SimpleKeyProvider::init(kek);
 //!
 //! let cipher: EnvelopeCipher<SimpleKeyProvider> = EnvelopeCipher::init(key_provider);
-//! let er = cipher.encrypt(b"hey there monkey boy").unwrap();
+//! let er = cipher.encrypt(b"hey there monkey boy").await.unwrap();
+//! #
+//! # });
 //! ```
 //!
 //! ## Encoding a CipherText
 //!
 //! ```rust
-//! # use envelope::{EnvelopeCipher, SimpleKeyProvider};
+//! # use enveloper::{EnvelopeCipher, SimpleKeyProvider};
+//! #
+//! # use tokio::runtime::Runtime;
+//! # let rt = Runtime::new().unwrap();
+//! # rt.block_on(async {
 //! #
 //! # use hex_literal::hex;
 //! # let kek: [u8; 16] = hex!("00010203 04050607 08090a0b 0c0d0e0f");
 //! # let key_provider = SimpleKeyProvider::init(kek);
 //! #
 //! # let cipher: EnvelopeCipher<SimpleKeyProvider> = EnvelopeCipher::init(key_provider);
-//! # let er = cipher.encrypt(b"hey there monkey boy").unwrap();
-//!
+//! # let er = cipher.encrypt(b"hey there monkey boy").await.unwrap();
+//! #
 //! let bytes = er.to_vec().unwrap();
 //! hex::encode(&bytes);
+//! # });
 //! ```
 //!
 //! ## Decrypting a CipherText
 //! ```rust
-//! use envelope::{EnvelopeCipher, SimpleKeyProvider, EncryptedRecord};
+//! use enveloper::{EnvelopeCipher, SimpleKeyProvider, EncryptedRecord};
+//!
+//! #
+//! # use tokio::runtime::Runtime;
+//! # let rt = Runtime::new().unwrap();
+//! # rt.block_on(async {
 //! #
 //! # use hex_literal::hex;
 //! # let kek: [u8; 16] = hex!("00010203 04050607 08090a0b 0c0d0e0f");
 //! # let key_provider = SimpleKeyProvider::init(kek);
 //! #
 //! # let cipher: EnvelopeCipher<SimpleKeyProvider> = EnvelopeCipher::init(key_provider);
-//! # let er = cipher.encrypt(b"hey there monkey boy").unwrap();
+//! # let er = cipher.encrypt(b"hey there monkey boy").await.unwrap();
 //! # let bytes = er.to_vec().unwrap();
 //! # hex::encode(&bytes);
-//!
+//! #
 //! let dec = EncryptedRecord::from_vec(bytes).unwrap();
-//! let pt = cipher.decrypt(dec).unwrap();
+//! let pt = cipher.decrypt(dec).await.unwrap();
 //!
 //! assert!(std::str::from_utf8(&pt).unwrap() == "hey there monkey boy");
+//! #
+//! # });
 //! ```
+
+
 
 mod errors;
 mod key_provider;
@@ -69,10 +89,8 @@ pub use crate::key_provider::KeyProvider;
 pub use crate::kms_key_provider::KMSKeyProvider;
 pub use crate::simple_key_provider::SimpleKeyProvider;
 
-use aes_gcm::aead::consts::U16;
 use aes_gcm::aead::{Aead, NewAead, Payload};
 use aes_gcm::{Aes128Gcm, Key, Nonce};
-use key_provider::DataKey;
 // Or `Aes256Gcm`
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
