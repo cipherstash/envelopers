@@ -92,7 +92,7 @@ impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
         let key = Key::from_slice(&self.kek);
         let cipher = AesGcm::<Aes128, U16>::new(key);
 
-        let decoded_key = EncryptedSimpleKey::from_slice(&encrypted_key)?;
+        let decoded_key = EncryptedSimpleKey::from_slice(encrypted_key)?;
 
         let data_key = cipher.decrypt(
             decoded_key.nonce,
@@ -140,7 +140,7 @@ impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
 
 #[cfg(test)]
 mod tests {
-    use tokio;
+    
 
     use super::{EncryptedSimpleKey, Nonce};
     use crate::{key_provider::DataKey, KeyProvider, SimpleKeyProvider};
