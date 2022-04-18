@@ -3,10 +3,11 @@
 use aes_gcm::aes::cipher::consts::U16;
 use aes_gcm::Key;
 use async_trait::async_trait;
+use zeroize::Zeroize;
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Zeroize)]
 pub struct DataKey {
     pub key: Key<U16>,
     // TODO: Maybe make a type for EncryptedKey
