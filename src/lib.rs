@@ -69,7 +69,7 @@
 //! # hex::encode(&bytes);
 //! #
 //! let dec = EncryptedRecord::from_vec(bytes).unwrap();
-//! let pt = cipher.decrypt(dec).await.unwrap();
+//! let pt = cipher.decrypt(&dec).await.unwrap();
 //!
 //! assert!(std::str::from_utf8(&pt).unwrap() == "hey there monkey boy");
 //! #
@@ -144,14 +144,14 @@ where
 {
     pub async fn decrypt(
         &self,
-        encrypted_record: EncryptedRecord,
+        encrypted_record: &EncryptedRecord,
     ) -> Result<Vec<u8>, DecryptionError> {
         let key = self
             .key_provider
             .decrypt_data_key(encrypted_record.encrypted_key.as_ref())
             .await?;
 
-        let aad = encrypted_record.key_id;
+        let aad = &encrypted_record.key_id;
         let msg = encrypted_record.ciphertext.as_ref();
         let payload = Payload {
             msg,
