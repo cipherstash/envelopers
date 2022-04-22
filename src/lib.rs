@@ -97,7 +97,7 @@ use rand_chacha::ChaChaRng;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 
-use errors::{DecryptionError, EncryptionError};
+pub use errors::{DecryptionError, EncryptionError};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EncryptedRecord {
