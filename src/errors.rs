@@ -11,6 +11,8 @@ pub enum EncryptionError {
     RngGeneration(#[from] rand::Error),
     #[error("an unknown encryption error ocurred")]
     Unknown,
+    #[error("{0}")]
+    Other(String),
 }
 
 impl Default for EncryptionError {
@@ -33,6 +35,8 @@ pub enum DecryptionError {
     KeyDecryption(#[from] KeyDecryptionError),
     #[error("an unknown decryption error ocurred")]
     Unknown,
+    #[error("{0}")]
+    Other(String),
 }
 
 impl Default for DecryptionError {
