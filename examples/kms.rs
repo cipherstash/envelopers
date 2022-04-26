@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let encrypted = cipher.encrypt("This is a great test string!".as_bytes()).await?;
 
-    let decrypted = cipher.decrypt(encrypted).await?;
+    let decrypted = cipher.decrypt(&encrypted).await?;
 
     println!("Decrypted: {}", String::from_utf8(decrypted)?);
 
