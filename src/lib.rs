@@ -101,8 +101,8 @@ pub use errors::{DecryptionError, EncryptionError};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EncryptedRecord {
-    pub ciphertext: Vec<u8>,
     pub encrypted_key: Vec<u8>,
+    pub ciphertext: Vec<u8>,
     pub nonce: [u8; 12],
     pub key_id: String,
 }
