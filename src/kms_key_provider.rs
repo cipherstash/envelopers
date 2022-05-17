@@ -30,13 +30,13 @@ impl KMSKeyProvider {
         key_id: impl Into<String>,
         access_key_id: impl Into<String>,
         secret_access_key: impl Into<String>,
-        session_token: impl Into<String>,
+        session_token: Option<impl Into<String>>,
         region: impl Into<String>,
     ) -> Self {
         let aws_creds = Credentials::new(
             access_key_id,
             secret_access_key,
-            Some(session_token.into()),
+            session_token.map(|x| x.into()),
             None,
             "Static",
         );
