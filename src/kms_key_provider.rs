@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use aws_sdk_kms::model::DataKeySpec;
 use aws_sdk_kms::types::Blob;
-use aws_sdk_kms::Client;
+use aws_sdk_kms::{Client, Config, Credentials, Region};
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
 use crate::key_provider::{DataKey, KeyProvider};
@@ -21,6 +21,34 @@ impl KMSKeyProvider {
             data_key_spec: DataKeySpec::Aes128,
             key_id,
         }
+    }
+
+    /// Create a KMS key provider from raw credentials
+    ///
+    /// This method is particularly useful when you can't load credentials from environment variables.
+    pub fn from_credentials(
+        key_id: impl Into<String>,
+        access_key_id: impl Into<String>,
+        secret_access_key: impl Into<String>,
+        session_token: Option<impl Into<String>>,
+        region: impl Into<String>,
+    ) -> Self {
+        let aws_creds = Credentials::new(
+            access_key_id,
+            secret_access_key,
+            session_token.map(|x| x.into()),
+            None,
+            "Static",
+        );
+
+        let config = Config::builder()
+            .region(Region::new(region.into()))
+            .credentials_provider(aws_creds)
+            .build();
+
+        let client = Client::from_conf(config);
+
+        Self::new(client, key_id.into())
     }
 
     pub fn with_spec(mut self, spec: DataKeySpec) -> Self {
