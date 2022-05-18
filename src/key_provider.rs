@@ -24,7 +24,7 @@ pub trait KeyProvider {
 }
 
 #[async_trait(?Send)]
-impl<K: KeyProvider> KeyProvider for Box<K> {
+impl KeyProvider for Box<dyn KeyProvider> {
     async fn generate_data_key(&self) -> Result<DataKey, KeyGenerationError> {
         (**self).generate_data_key().await
     }
