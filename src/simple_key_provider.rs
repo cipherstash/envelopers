@@ -79,10 +79,27 @@ mod tests {
 
     use crate::{key_provider::DataKey, KeyProvider, SimpleKeyProvider};
 
+    fn create_provider() -> SimpleKeyProvider {
+        SimpleKeyProvider::init([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+    }
+
     #[tokio::test]
     async fn test_generate_decrypt_data_key() {
-        let provider: SimpleKeyProvider =
-            SimpleKeyProvider::init([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+        let provider = create_provider();
+
+        let DataKey {
+            encrypted_key, key, ..
+        } = provider.generate_data_key().await.unwrap();
+
+        assert_eq!(
+            key,
+            provider.decrypt_data_key(&encrypted_key).await.unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_generate_decrypt_data_key_boxed() {
+        let provider: Box<dyn KeyProvider> = Box::new(create_provider());
 
         let DataKey {
             encrypted_key, key, ..
