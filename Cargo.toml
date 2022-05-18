@@ -1,7 +1,11 @@
 [package]
-name = "enveloper"
+name = "envelopers"
 version = "0.1.0"
 edition = "2021"
+license = "GPL-3.0"
+readme = "README.md"
+description = "A very simple envelope encryption library using aes-gcm"
+repository = "https://github.com/cipherstash/enveloper"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dev-dependencies]
