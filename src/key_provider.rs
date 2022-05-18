@@ -22,3 +22,17 @@ pub trait KeyProvider {
         encrypted_key: &Vec<u8>,
     ) -> Result<Key<U16>, KeyDecryptionError>;
 }
+
+#[async_trait(?Send)]
+impl<K: KeyProvider> KeyProvider for Box<K> {
+    async fn generate_data_key(&self) -> Result<DataKey, KeyGenerationError> {
+        (**self).generate_data_key().await
+    }
+
+    async fn decrypt_data_key(
+        &self,
+        encrypted_key: &Vec<u8>,
+    ) -> Result<Key<U16>, KeyDecryptionError> {
+        (**self).decrypt_data_key(encrypted_key).await
+    }
+}
