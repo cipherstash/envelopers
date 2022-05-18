@@ -1,5 +1,5 @@
 use aws_sdk_kms::Client;
-use envelopers::{EnvelopeCipher, KMSKeyProvider};
+use enveloper::{EnvelopeCipher, KMSKeyProvider};
 use std::error::Error;
 
 #[tokio::main]
