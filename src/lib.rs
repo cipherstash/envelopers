@@ -13,7 +13,7 @@
 //! The `SimpleKeyProvider` allows envelope encryption to be used with a local key.
 //!
 //! ```rust
-//! use envelopers::{EnvelopeCipher, SimpleKeyProvider};
+//! use enveloper::{EnvelopeCipher, SimpleKeyProvider};
 //!
 //! # use tokio::runtime::Runtime;
 //! # let rt = Runtime::new().unwrap();
@@ -32,7 +32,7 @@
 //! ## Encoding a CipherText
 //!
 //! ```rust
-//! # use envelopers::{EnvelopeCipher, SimpleKeyProvider};
+//! # use enveloper::{EnvelopeCipher, SimpleKeyProvider};
 //! #
 //! # use tokio::runtime::Runtime;
 //! # let rt = Runtime::new().unwrap();
@@ -52,7 +52,7 @@
 //!
 //! ## Decrypting a CipherText
 //! ```rust
-//! use envelopers::{EnvelopeCipher, SimpleKeyProvider, EncryptedRecord};
+//! use enveloper::{EnvelopeCipher, SimpleKeyProvider, EncryptedRecord};
 //!
 //! #
 //! # use tokio::runtime::Runtime;
