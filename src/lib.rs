@@ -76,8 +76,6 @@
 //! # });
 //! ```
 
-
-
 mod errors;
 mod key_provider;
 
@@ -190,5 +188,36 @@ where
             encrypted_key: data_key.encrypted_key,
             key_id,
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{EnvelopeCipher, SimpleKeyProvider, KeyProvider};
+
+    #[tokio::test]
+    async fn test_encrypt_decrypt() {
+        let provider: SimpleKeyProvider = SimpleKeyProvider::init([1; 16]);
+        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
+
+        let message = "hello".as_bytes();
+
+        let record = cipher.encrypt(message).await.unwrap();
+        let decrypted = cipher.decrypt(&record).await.unwrap();
+
+        assert_eq!(String::from_utf8(decrypted).unwrap(), "hello");
+    }
+
+    #[tokio::test]
+    async fn test_encrypt_decrypt_boxed() {
+        let provider: SimpleKeyProvider = SimpleKeyProvider::init([1; 16]);
+        let cipher: EnvelopeCipher<Box<dyn KeyProvider>> = EnvelopeCipher::init(Box::new(provider));
+
+        let message = "hello".as_bytes();
+
+        let record = cipher.encrypt(message).await.unwrap();
+        let decrypted = cipher.decrypt(&record).await.unwrap();
+
+        assert_eq!(String::from_utf8(decrypted).unwrap(), "hello");
     }
 }
