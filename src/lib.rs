@@ -76,26 +76,29 @@
 //! # });
 //! ```
 
-mod errors;
+pub mod errors;
 mod key_provider;
 
 mod kms_key_provider;
 mod simple_key_provider;
 
-pub use crate::key_provider::KeyProvider;
+pub use crate::key_provider::{DataKey, KeyProvider};
 
 pub use crate::kms_key_provider::KMSKeyProvider;
 pub use crate::simple_key_provider::SimpleKeyProvider;
 
+pub use aes_gcm::aes::cipher::consts::U16;
+pub use aes_gcm::Key;
+
 use aes_gcm::aead::{Aead, NewAead, Payload};
-use aes_gcm::{Aes128Gcm, Key, Nonce};
+use aes_gcm::{Aes128Gcm, Nonce};
 // Or `Aes256Gcm`
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 
-pub use errors::{DecryptionError, EncryptionError};
+pub use errors::{DecryptionError, EncryptionError, KeyDecryptionError, KeyGenerationError};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EncryptedRecord {
