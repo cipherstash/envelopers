@@ -11,12 +11,6 @@ use std::cell::RefCell;
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
 use crate::key_provider::{DataKey, KeyProvider};
 
-#[derive(Debug)]
-pub struct SimpleKeyProvider<R: SeedableRng + RngCore = ChaChaRng> {
-    kek: [u8; 16],
-    rng: RefCell<R>,
-}
-
 // EncryptedSimpleKey relies on this size being constant. If this ever needs to be changed a new
 // version of EncryptedSimpleKey needs to be created.
 type Nonce = aes_gcm::Nonce<U12>;
@@ -24,7 +18,7 @@ const NONCE_SIZE: usize = 12;
 
 /// A decoded intermediate representation of an encrypted simple key
 ///
-/// The data this struct is created from exists in memory like so:
+/// The encoded version of the encrypted simple key looks like so:
 ///
 /// | Pos  | Data                   |
 /// | -----|------------------------|
@@ -42,6 +36,7 @@ struct EncryptedSimpleKey<'a> {
 }
 
 impl<'a> EncryptedSimpleKey<'a> {
+    /// Decode an [`EncryptedSimpleKey`] from a slice following its encoded representation
     fn from_slice(bytes: &'a [u8]) -> Result<Self, KeyDecryptionError> {
         if bytes.len() < 1 + NONCE_SIZE {
             return Err(KeyDecryptionError::Other(format!(
@@ -69,6 +64,7 @@ impl<'a> EncryptedSimpleKey<'a> {
         })
     }
 
+    /// Encode an [`EncryptedSimpleKey`] as bytes
     fn to_vec(self) -> Vec<u8> {
         let mut output = Vec::with_capacity(1 + self.nonce.len() + self.key.len());
         output.push(self.version);
@@ -76,6 +72,12 @@ impl<'a> EncryptedSimpleKey<'a> {
         output.extend_from_slice(self.key);
         output
     }
+}
+
+#[derive(Debug)]
+pub struct SimpleKeyProvider<R: SeedableRng + RngCore = ChaChaRng> {
+    kek: [u8; 16],
+    rng: RefCell<R>,
 }
 
 impl<R: SeedableRng + RngCore> SimpleKeyProvider<R> {
