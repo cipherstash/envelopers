@@ -217,6 +217,23 @@ mod tests {
     }
 
     #[test]
+    fn test_fails_on_invalid_version() {
+        let slice: Vec<u8> = vec![
+            5, // version
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, // nonce
+            1, 2, 3, 4, 5, 6, // encrypted key (size is unknown)
+        ];
+
+        let err =
+            EncryptedSimpleKey::from_slice(&slice).expect_err("Encrypted key decode succeeded");
+
+        assert_eq!(
+            err.to_string(),
+            "EncryptedSimpleKey version tag was invalid. Received: 5"
+        );
+    }
+
+    #[test]
     fn test_fails_on_tiny_slice() {
         let slice: Vec<u8> = vec![5, 1, 2, 3, 4, 5, 6];
 
