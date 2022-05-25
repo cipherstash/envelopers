@@ -1,8 +1,9 @@
 //! Trait for a KeyProvider
 
 use aes_gcm::aead::{Aead, NewAead, Payload};
-use aes_gcm::aes::cipher::consts::{U12, U16};
-use aes_gcm::{Aes128Gcm, Key}; // Or `Aes256Gcm`
+use aes_gcm::aes::cipher::consts::U16;
+use aes_gcm::aes::Aes128; // Or Aes256
+use aes_gcm::{AesGcm, Key};
 use async_trait::async_trait;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
@@ -13,8 +14,8 @@ use crate::key_provider::{DataKey, KeyProvider};
 
 // EncryptedSimpleKey relies on this size being constant. If this ever needs to be changed a new
 // version of EncryptedSimpleKey needs to be created.
-type Nonce = aes_gcm::Nonce<U12>;
-const NONCE_SIZE: usize = 12;
+type Nonce = aes_gcm::Nonce<U16>;
+const NONCE_SIZE: usize = 16;
 
 /// A decoded intermediate representation of an encrypted simple key
 ///
@@ -23,8 +24,8 @@ const NONCE_SIZE: usize = 12;
 /// | Pos  | Data                   |
 /// | -----|------------------------|
 /// | 0    | Version tag (1 byte)   |
-/// | 1-13 | Nonce       (12 bytes) |
-/// | 13-  | Encrypted key          |
+/// | 1-17 | Nonce       (16 bytes) |
+/// | 17-  | Encrypted key          |
 #[derive(Debug)]
 struct EncryptedSimpleKey<'a> {
     // Keep a version tag on the key just in case the format gets changed
@@ -46,13 +47,6 @@ impl<'a> EncryptedSimpleKey<'a> {
         }
 
         let version = bytes[0];
-
-        if version != 1 {
-            return Err(KeyDecryptionError::Other(format!(
-                "EncryptedSimpleKey version tag was invalid. Received: {}",
-                version
-            )));
-        }
 
         let nonce: &'a Nonce = Nonce::from_slice(&bytes[1..1 + NONCE_SIZE]);
         let key: &'a [u8] = &bytes[1 + NONCE_SIZE..];
@@ -96,7 +90,7 @@ impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
         encrypted_key: &Vec<u8>,
     ) -> Result<Key<U16>, KeyDecryptionError> {
         let key = Key::from_slice(&self.kek);
-        let cipher = Aes128Gcm::new(key);
+        let cipher = AesGcm::<Aes128, U16>::new(key);
 
         let decoded_key = EncryptedSimpleKey::from_slice(&encrypted_key)?;
 
@@ -104,7 +98,7 @@ impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
             decoded_key.nonce,
             Payload {
                 msg: decoded_key.key,
-                aad: b"",
+                aad: &[decoded_key.version],
             },
         )?;
 
@@ -113,8 +107,9 @@ impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
 
     async fn generate_data_key(&self) -> Result<DataKey, KeyGenerationError> {
         let key = Key::from_slice(&self.kek);
-        let cipher = Aes128Gcm::new(key);
+        let cipher = AesGcm::<Aes128, U16>::new(key);
 
+        let version = 1;
         let mut data_key: Key<U16> = Default::default();
         let mut nonce: Nonce = Default::default();
 
@@ -124,13 +119,13 @@ impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
 
         let payload = Payload {
             msg: &data_key,
-            aad: b"",
+            aad: &[version],
         };
 
         let ciphertext = cipher.encrypt(&nonce, payload)?;
 
         let encrypted_key = EncryptedSimpleKey {
-            version: 1,
+            version,
             key: &ciphertext,
             nonce: &nonce,
         };
@@ -200,11 +195,60 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_fails_on_invalid_nonce() {
+        let provider: SimpleKeyProvider = SimpleKeyProvider::init([0; 16]);
+
+        let DataKey {
+            mut encrypted_key, ..
+        } = provider.generate_data_key().await.unwrap();
+
+        // Decrypts data key fine
+        assert!(provider.decrypt_data_key(&encrypted_key).await.is_ok());
+
+        // Replace the nonce with a nonsense one
+        encrypted_key[1..17]
+            .clone_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+
+        assert_eq!(
+            provider
+                .decrypt_data_key(&encrypted_key)
+                .await
+                .map_err(|e| e.to_string())
+                .expect_err("Decrypting data key succeeded"),
+            "failed to decrypt key"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_fails_on_invalid_version() {
+        let provider: SimpleKeyProvider = SimpleKeyProvider::init([0; 16]);
+
+        let DataKey {
+            mut encrypted_key, ..
+        } = provider.generate_data_key().await.unwrap();
+
+        // Decrypts data key fine
+        assert!(provider.decrypt_data_key(&encrypted_key).await.is_ok());
+
+        // Replace key version with invalid one
+        encrypted_key[0] = 5;
+
+        assert_eq!(
+            provider
+                .decrypt_data_key(&encrypted_key)
+                .await
+                .map_err(|e| e.to_string())
+                .expect_err("Decrypting data key succeeded"),
+            "failed to decrypt key"
+        );
+    }
+
     #[test]
     fn test_load_encrypted_key_from_slice() {
         let slice: Vec<u8> = vec![
             1, // version
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, // nonce
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, // nonce
             1, 2, 3, 4, 5, 6, // encrypted key (size is unknown)
         ];
 
@@ -213,26 +257,9 @@ mod tests {
         assert_eq!(key.version, 1);
         assert_eq!(
             key.nonce,
-            Nonce::from_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+            Nonce::from_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
         );
         assert_eq!(key.key, &[1, 2, 3, 4, 5, 6]);
-    }
-
-    #[test]
-    fn test_fails_on_invalid_version() {
-        let slice: Vec<u8> = vec![
-            5, // version
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, // nonce
-            1, 2, 3, 4, 5, 6, // encrypted key (size is unknown)
-        ];
-
-        let err =
-            EncryptedSimpleKey::from_slice(&slice).expect_err("Encrypted key decode succeeded");
-
-        assert_eq!(
-            err.to_string(),
-            "EncryptedSimpleKey version tag was invalid. Received: 5"
-        );
     }
 
     #[test]
@@ -251,7 +278,7 @@ mod tests {
     #[test]
     fn test_seriailze_key() {
         let version = 1;
-        let nonce = Nonce::from_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+        let nonce = Nonce::from_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
         let key = &[1, 2, 3, 4, 5, 6];
 
         let encrypted_key = EncryptedSimpleKey {
@@ -266,7 +293,7 @@ mod tests {
             bytes,
             vec![
                 1, // version
-                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, // nonce
+                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, // nonce
                 1, 2, 3, 4, 5, 6, // encrypted key (size is unknown)
             ]
         );
