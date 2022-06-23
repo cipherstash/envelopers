@@ -5,12 +5,12 @@ use aes_gcm::aes::cipher::consts::U16;
 use aes_gcm::aes::Aes128; // Or Aes256
 use aes_gcm::{AesGcm, Key};
 use async_trait::async_trait;
-use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
-use std::cell::RefCell;
+use std::sync::Mutex;
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
 use crate::key_provider::{DataKey, KeyProvider};
+use crate::safe_rng::SafeRng;
 
 // EncryptedSimpleKey relies on this size being constant. If this ever needs to be changed a new
 // version of EncryptedSimpleKey needs to be created.
@@ -69,22 +69,22 @@ impl<'a> EncryptedSimpleKey<'a> {
 }
 
 #[derive(Debug)]
-pub struct SimpleKeyProvider<R: SeedableRng + RngCore = ChaChaRng> {
+pub struct SimpleKeyProvider<R: SafeRng = ChaChaRng> {
     kek: [u8; 16],
-    rng: RefCell<R>,
+    rng: Mutex<R>,
 }
 
-impl<R: SeedableRng + RngCore> SimpleKeyProvider<R> {
+impl<R: SafeRng> SimpleKeyProvider<R> {
     pub fn init(kek: [u8; 16]) -> Self {
         Self {
             kek,
-            rng: RefCell::new(R::from_entropy()),
+            rng: Mutex::new(R::from_entropy()),
         }
     }
 }
 
-#[async_trait(?Send)]
-impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
+#[async_trait]
+impl<R: SafeRng> KeyProvider for SimpleKeyProvider<R> {
     async fn decrypt_data_key(
         &self,
         encrypted_key: &Vec<u8>,
@@ -113,9 +113,11 @@ impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
         let mut data_key: Key<U16> = Default::default();
         let mut nonce: Nonce = Default::default();
 
-        let mut rng = self.rng.borrow_mut();
-        rng.try_fill_bytes(&mut data_key)?;
-        rng.try_fill_bytes(&mut nonce)?;
+        {
+            let mut rng = self.rng.lock().unwrap_or_else(|e| e.into_inner());
+            rng.try_fill_bytes(&mut data_key)?;
+            rng.try_fill_bytes(&mut nonce)?;
+        }
 
         let payload = Payload {
             msg: &data_key,

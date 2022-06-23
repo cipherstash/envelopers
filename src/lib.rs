@@ -78,6 +78,7 @@
 
 pub mod errors;
 mod key_provider;
+pub mod safe_rng;
 
 mod kms_key_provider;
 mod simple_key_provider;
@@ -93,10 +94,11 @@ pub use aes_gcm::Key;
 use aes_gcm::aead::{Aead, NewAead, Payload};
 use aes_gcm::{Aes128Gcm, Nonce};
 // Or `Aes256Gcm`
-use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
+use safe_rng::SafeRng;
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
+use std::sync::Mutex;
+use static_assertions::assert_impl_all;
 
 pub use errors::{DecryptionError, EncryptionError, KeyDecryptionError, KeyGenerationError};
 
@@ -118,31 +120,21 @@ impl EncryptedRecord {
     }
 }
 
-pub struct EnvelopeCipher<K, R = ChaChaRng>
-where
-    R: SeedableRng + RngCore,
-{
+pub struct EnvelopeCipher<K, R: SafeRng = ChaChaRng> {
     pub key_provider: K,
-    pub rng: RefCell<R>,
+    pub rng: Mutex<R>,
 }
 
-impl<K, R> EnvelopeCipher<K, R>
-where
-    R: SeedableRng + RngCore,
-{
+impl<K, R: SafeRng> EnvelopeCipher<K, R> {
     pub fn init(key_provider: K) -> Self {
         Self {
             key_provider,
-            rng: RefCell::new(R::from_entropy()),
+            rng: Mutex::new(R::from_entropy()),
         }
     }
 }
 
-impl<K, R> EnvelopeCipher<K, R>
-where
-    K: KeyProvider,
-    R: SeedableRng + RngCore,
-{
+impl<K: KeyProvider, R: SafeRng> EnvelopeCipher<K, R> {
     pub async fn decrypt(
         &self,
         encrypted_record: &EncryptedRecord,
@@ -171,7 +163,10 @@ where
         let data_key = self.key_provider.generate_data_key().await?;
         let key_id = data_key.key_id;
 
-        self.rng.borrow_mut().try_fill_bytes(&mut nonce_data)?;
+        {
+            let mut rng = self.rng.lock().unwrap_or_else(|e| e.into_inner());
+            rng.try_fill_bytes(&mut nonce_data)?;
+        }
 
         let payload = Payload {
             msg,
@@ -194,9 +189,14 @@ where
     }
 }
 
+// Ensure that all supported EnvelopeCiphers can be shared between threads
+assert_impl_all!(EnvelopeCipher<SimpleKeyProvider>: Send, Sync);
+assert_impl_all!(EnvelopeCipher<KMSKeyProvider>: Send, Sync);
+assert_impl_all!(EnvelopeCipher<Box<dyn KeyProvider>>: Send, Sync);
+
 #[cfg(test)]
 mod tests {
-    use crate::{EnvelopeCipher, SimpleKeyProvider, KeyProvider};
+    use crate::{EnvelopeCipher, KeyProvider, SimpleKeyProvider};
 
     #[tokio::test]
     async fn test_encrypt_decrypt() {

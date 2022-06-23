@@ -14,8 +14,8 @@ pub struct DataKey {
     pub key_id: String,
 }
 
-#[async_trait(?Send)]
-pub trait KeyProvider {
+#[async_trait]
+pub trait KeyProvider: Sync + Send {
     async fn generate_data_key(&self) -> Result<DataKey, KeyGenerationError>;
     async fn decrypt_data_key(
         &self,
@@ -23,7 +23,7 @@ pub trait KeyProvider {
     ) -> Result<Key<U16>, KeyDecryptionError>;
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl KeyProvider for Box<dyn KeyProvider> {
     async fn generate_data_key(&self) -> Result<DataKey, KeyGenerationError> {
         (**self).generate_data_key().await
