@@ -17,6 +17,8 @@ aws-smithy-client = { version = "0.40.2", features = [ "test-util" ] }
 aws-smithy-http = "0.40.2"
 http = "0.2"
 base64 = "0.13.0"
+futures = "0.3.21"
+itertools = "0.10.3"
 
 [dependencies]
 aes-gcm = "0.9.4"

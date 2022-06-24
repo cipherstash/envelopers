@@ -196,7 +196,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{EnvelopeCipher, SimpleKeyProvider, KeyProvider};
+    use crate::{EnvelopeCipher, KeyProvider, SimpleKeyProvider};
 
     #[tokio::test]
     async fn test_encrypt_decrypt() {
