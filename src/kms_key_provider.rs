@@ -57,7 +57,7 @@ impl KMSKeyProvider {
     }
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl KeyProvider for KMSKeyProvider {
     async fn generate_data_key(&self) -> Result<DataKey, KeyGenerationError> {
         let mut response = self
