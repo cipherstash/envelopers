@@ -6,4 +6,10 @@ a `SimpleKeyProvider` that can be used with a local key.
 
 **NOTE: This library is very alpha and not yet suitable for production use**
 
+## Examples
 
+### AWS Key Management Service
+
+In order to run the AWS KMS examples you need to ensure the correct environment variables or config options are set to connect to your AWS account.
+
+Follow the AWS [getting started](https://docs.aws.amazon.com/sdk-for-rust/latest/dg/getting-started.html) docs for help.

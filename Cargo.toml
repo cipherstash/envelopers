@@ -1,6 +1,6 @@
 [package]
 name = "envelopers"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "GPL-3.0"
 readme = "README.md"
@@ -17,6 +17,8 @@ aws-smithy-client = { version = "0.40.2", features = [ "test-util" ] }
 aws-smithy-http = "0.40.2"
 http = "0.2"
 base64 = "0.13.0"
+futures = "0.3.21"
+itertools = "0.10.3"
 
 [dependencies]
 aes-gcm = "0.9.4"
@@ -27,3 +29,5 @@ serde_cbor = "0.11.2"
 thiserror = "1.0.30"
 async-trait = "0.1.53"
 aws-sdk-kms = "0.10.1"
+lru = "0.7.5"
+zeroize = { version = "1.5.5", features = [ "zeroize_derive" ] }
