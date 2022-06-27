@@ -5,8 +5,17 @@ use itertools::Itertools;
 use rand::{distributions::Alphanumeric, Rng};
 use std::{error::Error, fmt::Debug, future::Future, iter::IntoIterator, time::Duration};
 
+// The number of messages to be encrypted and decrypted
 const MESSAGE_COUNT: usize = 1_000;
-const MESSAGE_SIZE_BYTES: usize = 1024;
+
+// The size of the message in characters of each message
+const MESSAGE_SIZE_CHARS: usize = 1024;
+
+// The number of futures to be joined at the same time. Practically this represents the number of
+// parallel requests to KMS.
+//
+// Note: If this number is set too high it can exceed the number of concurrent requests that the
+// KMS client can handle.
 const MAX_PARALLEL_REQS: usize = 10;
 
 async fn join_all_with_chunks<T, U: Debug, F: Future<Output = Result<T, U>>>(
@@ -24,8 +33,22 @@ async fn join_all_with_chunks<T, U: Debug, F: Future<Output = Result<T, U>>>(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    // Load the AWS KMS client from the local environment.
+    //
+    // If using AWS secret keys, ensure your credentials are set in ~/.aws/credentials,
+    // or set the following environment variables:
+    // - AWS_ACCESS_KEY_ID
+    // - AWS_SECRET_ACCESS_KEY
+    //
+    // Alternatively, if using AWS STS set the following environment variables:
+    // - AWS_SECRET_ACCESS_KEY
+    // - AWS_SESSION_TOKEN
+    // - AWS_ACCESS_KEY_ID
+    // - AWS_REGION
     let client = Client::new(&aws_config::from_env().load().await);
 
+    // Create a new KMSKeyProvider using the KMS key specified by the CS_KEY_ID environment
+    // variable.
     let provider = KMSKeyProvider::new(
         client,
         std::env::var("CS_KEY_ID")
@@ -45,7 +68,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .map(|_| {
             rand::thread_rng()
                 .sample_iter(&Alphanumeric)
-                .take(MESSAGE_SIZE_BYTES)
+                .take(MESSAGE_SIZE_CHARS)
                 .map(char::from)
                 .collect()
         })
