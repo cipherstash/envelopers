@@ -5,6 +5,18 @@ use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    // Load the AWS KMS client from the local environment.
+    //
+    // If using AWS secret keys, ensure your credentials are set in ~/.aws/credentials,
+    // or set the following environment variables:
+    // - AWS_ACCESS_KEY_ID
+    // - AWS_SECRET_ACCESS_KEY
+    //
+    // Alternatively, if using AWS STS set the following environment variables:
+    // - AWS_SECRET_ACCESS_KEY
+    // - AWS_SESSION_TOKEN
+    // - AWS_ACCESS_KEY_ID
+    // - AWS_REGION
     let client = Client::new(&aws_config::from_env().load().await);
 
     let provider = KMSKeyProvider::new(client, std::env::var("CS_KEY_ID")?);
