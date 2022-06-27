@@ -264,3 +264,248 @@ where
         Ok(plaintext_key)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{CacheOptions, CachingKeyWrapper};
+    use crate::{DataKey, Key, KeyDecryptionError, KeyGenerationError, KeyProvider, U16};
+    use aes_gcm::{
+        aead::{Aead, Payload},
+        Aes128Gcm, NewAead,
+    };
+    use async_trait::async_trait;
+    use std::{
+        sync::atomic::{AtomicU8, Ordering},
+        time::Duration,
+    };
+
+    fn test_encrypt_bytes(bytes: &[u8]) -> Vec<u8> {
+        let cipher = Aes128Gcm::new(Key::from_slice(&[1; 16]));
+
+        cipher
+            .encrypt(
+                Key::from_slice(&[2; 12]),
+                Payload {
+                    msg: bytes,
+                    aad: &[],
+                },
+            )
+            .expect("Failed to encrypt")
+    }
+
+    fn test_decrypt_bytes(bytes: &[u8]) -> Vec<u8> {
+        let cipher = Aes128Gcm::new(Key::from_slice(&[1; 16]));
+        cipher
+            .decrypt(
+                Key::from_slice(&[2; 12]),
+                Payload {
+                    msg: bytes,
+                    aad: &[],
+                },
+            )
+            .expect("Failed to decrypt")
+    }
+
+    #[derive(Default)]
+    struct TestKeyProvider {
+        generate_counter: AtomicU8,
+        decrypt_counter: AtomicU8,
+    }
+
+    impl TestKeyProvider {
+        fn get_decrypt_count(&self) -> usize {
+            self.decrypt_counter.load(Ordering::Relaxed) as usize
+        }
+
+        fn get_generate_count(&self) -> usize {
+            self.generate_counter.load(Ordering::Relaxed) as usize
+        }
+    }
+
+    #[async_trait(?Send)]
+    impl KeyProvider for TestKeyProvider {
+        async fn decrypt_data_key(
+            &self,
+            encrypted_key: &Vec<u8>,
+        ) -> Result<Key<U16>, KeyDecryptionError> {
+            self.decrypt_counter.fetch_add(1, Ordering::Relaxed);
+            Ok(Key::clone_from_slice(&test_decrypt_bytes(encrypted_key)))
+        }
+
+        async fn generate_data_key(&self) -> Result<DataKey, KeyGenerationError> {
+            let count = self.generate_counter.fetch_add(1, Ordering::Relaxed);
+            // Generate a data key that is just the current count for all bytes
+            let key = Key::clone_from_slice(&[count; 16]);
+            let encrypted_key = test_encrypt_bytes(&key);
+            Ok(DataKey {
+                key,
+                encrypted_key,
+                key_id: "test".into(),
+            })
+        }
+    }
+
+    fn create_test_cache() -> CachingKeyWrapper<TestKeyProvider> {
+        CachingKeyWrapper::new(
+            TestKeyProvider::default(),
+            CacheOptions::default()
+                .with_max_age(Duration::from_millis(10))
+                .with_max_bytes(100)
+                .with_max_entries(10)
+                .with_max_messages(10),
+        )
+    }
+
+    #[tokio::test]
+    async fn test_generate_uses_cached_key() {
+        let cache = create_test_cache();
+
+        assert_eq!(cache.provider.get_generate_count(), 0);
+
+        assert!(cache.get_or_generate_data_key_for_bytes(10).await.is_ok());
+
+        assert_eq!(cache.provider.get_generate_count(), 1);
+
+        assert!(cache.get_or_generate_data_key_for_bytes(10).await.is_ok());
+
+        // Not incremented because cache was used
+        assert_eq!(cache.provider.get_generate_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_generate_expires_after_10_messages() {
+        let cache = create_test_cache();
+
+        assert_eq!(cache.provider.get_generate_count(), 0);
+
+        assert!(cache.get_or_generate_data_key_for_bytes(1).await.is_ok());
+
+        assert_eq!(cache.provider.get_generate_count(), 1);
+
+        for _ in 0..9 {
+            assert!(cache.get_or_generate_data_key_for_bytes(1).await.is_ok());
+        }
+
+        assert_eq!(cache.provider.get_generate_count(), 1);
+
+        assert!(cache.get_or_generate_data_key_for_bytes(1).await.is_ok());
+
+        // Incremented because 11th message needed new data key
+        assert_eq!(cache.provider.get_generate_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_generate_expires_after_100_bytes() {
+        let cache = create_test_cache();
+
+        assert_eq!(cache.provider.get_generate_count(), 0);
+
+        assert!(cache.get_or_generate_data_key_for_bytes(10).await.is_ok()); // 10
+        assert!(cache.get_or_generate_data_key_for_bytes(30).await.is_ok()); // 40
+        assert!(cache.get_or_generate_data_key_for_bytes(60).await.is_ok()); // 100
+
+        assert_eq!(cache.provider.get_generate_count(), 1);
+
+        assert!(cache.get_or_generate_data_key_for_bytes(1).await.is_ok()); // 101
+
+        assert_eq!(cache.provider.get_generate_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_generate_expires_after_10_ms() {
+        let cache = create_test_cache();
+
+        assert_eq!(cache.provider.get_generate_count(), 0);
+
+        assert!(cache.get_or_generate_data_key_for_bytes(10).await.is_ok());
+        assert_eq!(cache.provider.get_generate_count(), 1);
+
+        std::thread::sleep(Duration::from_millis(8));
+
+        assert_eq!(cache.provider.get_generate_count(), 1);
+
+        std::thread::sleep(Duration::from_millis(8));
+
+        assert!(cache.get_or_generate_data_key_for_bytes(10).await.is_ok());
+        assert_eq!(cache.provider.get_generate_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_generate_caches_for_decrypt() {
+        let cache = create_test_cache();
+
+        assert_eq!(cache.provider.get_generate_count(), 0);
+
+        let DataKey { encrypted_key, .. } = cache
+            .get_or_generate_data_key_for_bytes(10)
+            .await
+            .expect("Expected generate to succeed");
+
+        assert_eq!(cache.provider.get_generate_count(), 1);
+
+        assert!(cache.decrypt_data_key(&encrypted_key).await.is_ok());
+
+        // No keys were decrypted because they were in the cache
+        assert_eq!(cache.provider.get_decrypt_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_caches_decryption() {
+        let cache = create_test_cache();
+
+        let key: Key<U16> = Key::clone_from_slice(&[1; 16]);
+
+        assert!(cache
+            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .await
+            .is_ok());
+
+        assert_eq!(cache.provider.get_decrypt_count(), 1);
+
+        assert!(cache
+            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .await
+            .is_ok());
+
+        // Used cached key so not incremented
+        assert_eq!(cache.provider.get_decrypt_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_expires_decryption_key_after_10ms() {
+        // Note: this is what the JS SDK does but I don't think it's necessary.
+        // If we have a key cached and it is being used there shouldn't be a need
+        // to refetch it. This will just result in uncessary calls to the key provider
+        // to return the same value to the cache.
+
+        let cache = create_test_cache();
+
+        let key: Key<U16> = Key::clone_from_slice(&[1; 16]);
+
+        assert!(cache
+            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .await
+            .is_ok());
+
+        assert_eq!(cache.provider.get_decrypt_count(), 1);
+
+        std::thread::sleep(Duration::from_millis(8));
+
+        assert!(cache
+            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .await
+            .is_ok());
+
+        assert_eq!(cache.provider.get_decrypt_count(), 1);
+
+        std::thread::sleep(Duration::from_millis(8));
+
+        assert!(cache
+            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .await
+            .is_ok());
+
+        // Time is past 10ms so it refetches
+        assert_eq!(cache.provider.get_decrypt_count(), 2);
+    }
+}
