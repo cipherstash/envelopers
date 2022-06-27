@@ -118,7 +118,7 @@ impl KeyProvider for KMSKeyProvider {
 
 #[cfg(test)]
 mod tests {
-    use tokio;
+    
 
     use aws_sdk_kms::{Client, Config, Credentials, Region};
     use aws_smithy_client::test_connection::TestConnection;

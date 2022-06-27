@@ -13,7 +13,7 @@
 //! The `SimpleKeyProvider` allows envelope encryption to be used with a local key.
 //!
 //! ```rust
-//! use envelopers::{EnvelopeCipher, SimpleKeyProvider};
+//! use envelopers::{EnvelopeCipher, SimpleKeyProvider, CacheOptions};
 //!
 //! # use tokio::runtime::Runtime;
 //! # let rt = Runtime::new().unwrap();
@@ -23,7 +23,10 @@
 //! let kek: [u8; 16] = hex!("00010203 04050607 08090a0b 0c0d0e0f");
 //! let key_provider = SimpleKeyProvider::init(kek);
 //!
-//! let cipher: EnvelopeCipher<SimpleKeyProvider> = EnvelopeCipher::init(key_provider);
+//! let cipher: EnvelopeCipher<SimpleKeyProvider> = EnvelopeCipher::init(
+//!     key_provider,
+//!     CacheOptions::default()
+//! );
 //! let er = cipher.encrypt(b"hey there monkey boy").await.unwrap();
 //! #
 //! # });
@@ -32,7 +35,7 @@
 //! ## Encoding a CipherText
 //!
 //! ```rust
-//! # use envelopers::{EnvelopeCipher, SimpleKeyProvider};
+//! # use envelopers::{EnvelopeCipher, SimpleKeyProvider, CacheOptions};
 //! #
 //! # use tokio::runtime::Runtime;
 //! # let rt = Runtime::new().unwrap();
@@ -42,7 +45,11 @@
 //! # let kek: [u8; 16] = hex!("00010203 04050607 08090a0b 0c0d0e0f");
 //! # let key_provider = SimpleKeyProvider::init(kek);
 //! #
-//! # let cipher: EnvelopeCipher<SimpleKeyProvider> = EnvelopeCipher::init(key_provider);
+//! # let cipher: EnvelopeCipher<SimpleKeyProvider> = EnvelopeCipher::init(
+//! #   key_provider,
+//! #   CacheOptions::default()
+//! # );
+//! #
 //! # let er = cipher.encrypt(b"hey there monkey boy").await.unwrap();
 //! #
 //! let bytes = er.to_vec().unwrap();
@@ -52,7 +59,7 @@
 //!
 //! ## Decrypting a CipherText
 //! ```rust
-//! use envelopers::{EnvelopeCipher, SimpleKeyProvider, EncryptedRecord};
+//! use envelopers::{EnvelopeCipher, SimpleKeyProvider, EncryptedRecord, CacheOptions};
 //!
 //! #
 //! # use tokio::runtime::Runtime;
@@ -63,7 +70,10 @@
 //! # let kek: [u8; 16] = hex!("00010203 04050607 08090a0b 0c0d0e0f");
 //! # let key_provider = SimpleKeyProvider::init(kek);
 //! #
-//! # let cipher: EnvelopeCipher<SimpleKeyProvider> = EnvelopeCipher::init(key_provider);
+//! # let cipher: EnvelopeCipher<SimpleKeyProvider> = EnvelopeCipher::init(
+//! #    key_provider,
+//! #    CacheOptions::default()
+//! # );
 //! # let er = cipher.encrypt(b"hey there monkey boy").await.unwrap();
 //! # let bytes = er.to_vec().unwrap();
 //! # hex::encode(&bytes);
@@ -79,11 +89,13 @@
 pub mod errors;
 mod key_provider;
 
+mod caching_key_wrapper;
 mod kms_key_provider;
 mod simple_key_provider;
 
 pub use crate::key_provider::{DataKey, KeyProvider};
 
+pub use crate::caching_key_wrapper::{CacheOptions, CachingKeyWrapper};
 pub use crate::kms_key_provider::KMSKeyProvider;
 pub use crate::simple_key_provider::SimpleKeyProvider;
 
@@ -122,17 +134,18 @@ pub struct EnvelopeCipher<K, R = ChaChaRng>
 where
     R: SeedableRng + RngCore,
 {
-    pub key_provider: K,
+    pub wrapper: CachingKeyWrapper<K>,
     pub rng: RefCell<R>,
 }
 
 impl<K, R> EnvelopeCipher<K, R>
 where
+    K: KeyProvider,
     R: SeedableRng + RngCore,
 {
-    pub fn init(key_provider: K) -> Self {
+    pub fn init(key_provider: K, options: CacheOptions) -> Self {
         Self {
-            key_provider,
+            wrapper: CachingKeyWrapper::new(key_provider, options),
             rng: RefCell::new(R::from_entropy()),
         }
     }
@@ -148,7 +161,7 @@ where
         encrypted_record: &EncryptedRecord,
     ) -> Result<Vec<u8>, DecryptionError> {
         let key = self
-            .key_provider
+            .wrapper
             .decrypt_data_key(encrypted_record.encrypted_key.as_ref())
             .await?;
 
@@ -156,19 +169,23 @@ where
         let msg = encrypted_record.ciphertext.as_ref();
         let payload = Payload {
             msg,
-            aad: &aad.as_bytes(),
+            aad: aad.as_bytes(),
         };
 
         let cipher = Aes128Gcm::new(&key);
-        let message = cipher.decrypt(&Nonce::from_slice(&encrypted_record.nonce), payload)?;
+        let message = cipher.decrypt(Nonce::from_slice(&encrypted_record.nonce), payload)?;
 
-        return Ok(message);
+        Ok(message)
     }
 
     pub async fn encrypt(&self, msg: &[u8]) -> Result<EncryptedRecord, EncryptionError> {
         let mut nonce_data = [0u8; 12];
 
-        let data_key = self.key_provider.generate_data_key().await?;
+        let data_key = self
+            .wrapper
+            .get_or_generate_data_key_for_bytes(msg.len())
+            .await?;
+
         let key_id = data_key.key_id;
 
         self.rng.borrow_mut().try_fill_bytes(&mut nonce_data)?;
@@ -183,25 +200,25 @@ where
         // TODO: Use Zeroize for the drop
         let key = Key::from_slice(&data_key.key);
         let cipher = Aes128Gcm::new(key);
-        let ciphertext = cipher.encrypt(&nonce, payload)?;
+        let ciphertext = cipher.encrypt(nonce, payload)?;
 
-        return Ok(EncryptedRecord {
+        Ok(EncryptedRecord {
             ciphertext,
             nonce: nonce_data,
             encrypted_key: data_key.encrypted_key,
             key_id,
-        });
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{EnvelopeCipher, SimpleKeyProvider, KeyProvider};
+    use crate::{EnvelopeCipher, KeyProvider, SimpleKeyProvider};
 
     #[tokio::test]
     async fn test_encrypt_decrypt() {
         let provider: SimpleKeyProvider = SimpleKeyProvider::init([1; 16]);
-        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider, Default::default());
 
         let message = "hello".as_bytes();
 
@@ -214,7 +231,8 @@ mod tests {
     #[tokio::test]
     async fn test_encrypt_decrypt_boxed() {
         let provider: SimpleKeyProvider = SimpleKeyProvider::init([1; 16]);
-        let cipher: EnvelopeCipher<Box<dyn KeyProvider>> = EnvelopeCipher::init(Box::new(provider));
+        let cipher: EnvelopeCipher<Box<dyn KeyProvider>> =
+            EnvelopeCipher::init(Box::new(provider), Default::default());
 
         let message = "hello".as_bytes();
 
