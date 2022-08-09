@@ -7,18 +7,18 @@ readme = "README.md"
 description = "A very simple envelope encryption library using aes-gcm"
 repository = "https://github.com/cipherstash/envelopers"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dev-dependencies]
 hex-literal = "0.3.2"
 hex = "0.4.3"
 tokio = { version = "1.17.0", features = [ "macros", "rt-multi-thread" ] }
-aws-config = "0.10.1"
-aws-smithy-client = { version = "0.40.2", features = [ "test-util" ] }
-aws-smithy-http = "0.40.2"
 http = "0.2"
 base64 = "0.13.0"
 futures = "0.3.21"
 itertools = "0.10.3"
+
+aws-config = "0.10.1"
+aws-smithy-client = { version = "0.40.2", features = [ "test-util" ] }
+aws-smithy-http = "0.40.2"
 
 [dependencies]
 aes-gcm = "0.9.4"
@@ -28,6 +28,19 @@ serde = { version = "1.0.136", features = ["derive"] }
 serde_cbor = "0.11.2"
 thiserror = "1.0.30"
 async-trait = "0.1.53"
-aws-sdk-kms = "0.10.1"
 lru = "0.7.5"
 zeroize = { version = "1.5.5", features = [ "zeroize_derive" ] }
+
+aws-sdk-kms = { version = "0.10.1", optional = true }
+
+[features]
+# Enable the KMS Key Provider
+aws-kms = ["dep:aws-sdk-kms"]
+
+[[example]]
+name = "kms"
+required-features = ["aws-kms"]
+
+[[example]]
+name = "kms-benchmark"
+required-features = ["aws-kms"]
