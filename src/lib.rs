@@ -90,14 +90,18 @@ pub mod errors;
 mod key_provider;
 
 mod caching_key_wrapper;
-mod kms_key_provider;
 mod simple_key_provider;
+
+#[cfg(feature = "aws-kms")]
+mod kms_key_provider;
 
 pub use crate::key_provider::{DataKey, KeyProvider};
 
 pub use crate::caching_key_wrapper::{CacheOptions, CachingKeyWrapper};
-pub use crate::kms_key_provider::KMSKeyProvider;
 pub use crate::simple_key_provider::SimpleKeyProvider;
+
+#[cfg(feature = "aws-kms")]
+pub use crate::kms_key_provider::KMSKeyProvider;
 
 pub use aes_gcm::aes::cipher::consts::U16;
 pub use aes_gcm::Key;
