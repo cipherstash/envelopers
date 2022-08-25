@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use aws_config::RetryConfig;
 use aws_sdk_kms::model::DataKeySpec;
 use aws_sdk_kms::types::Blob;
 use aws_sdk_kms::{Client, Config, Credentials, Region};
@@ -44,6 +45,7 @@ impl KMSKeyProvider {
         let config = Config::builder()
             .region(Region::new(region.into()))
             .credentials_provider(aws_creds)
+            .retry_config(RetryConfig::new().with_max_attempts(5))
             .build();
 
         let client = Client::from_conf(config);
@@ -118,7 +120,6 @@ impl KeyProvider for KMSKeyProvider {
 
 #[cfg(test)]
 mod tests {
-    
 
     use aws_sdk_kms::{Client, Config, Credentials, Region};
     use aws_smithy_client::test_connection::TestConnection;
