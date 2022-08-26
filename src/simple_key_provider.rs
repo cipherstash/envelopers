@@ -140,7 +140,6 @@ impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
 
 #[cfg(test)]
 mod tests {
-    
 
     use super::{EncryptedSimpleKey, Nonce};
     use crate::{key_provider::DataKey, KeyProvider, SimpleKeyProvider};
