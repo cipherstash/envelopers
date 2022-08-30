@@ -6,7 +6,7 @@ use rand::{distributions::Alphanumeric, Rng};
 use std::{error::Error, fmt::Debug, future::Future, iter::IntoIterator, time::Duration};
 
 // The number of messages to be encrypted and decrypted
-const MESSAGE_COUNT: usize = 10_000;
+const MESSAGE_COUNT: usize = 1_000;
 
 // The size of the message in characters of each message
 const MESSAGE_SIZE_CHARS: usize = 1024;
