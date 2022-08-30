@@ -1,5 +1,6 @@
 use aes_gcm::aes::cipher::consts::U16;
 use aes_gcm::Key;
+use async_trait::async_trait;
 use lru::LruCache;
 use std::cell::RefCell;
 use std::time::{Duration, Instant};
@@ -84,10 +85,7 @@ pub struct CachingKeyWrapper<K> {
     provider: K,
 }
 
-impl<K> CachingKeyWrapper<K>
-where
-    K: KeyProvider,
-{
+impl<K> CachingKeyWrapper<K> {
     /// Create a new CachingKeyWrapper from a certain key provider and caching options
     pub fn new(provider: K, options: CacheOptions) -> Self {
         Self {
@@ -229,27 +227,24 @@ where
 
         Ok(())
     }
+}
 
-    /// Get a cached data key or generate one for a certain number of bytes
-    ///
-    /// Note: the bytes field is used to determine when keys should be expired. It's important that
-    /// this is the number of bytes the key will be used to encrypt.
-    pub async fn get_or_generate_data_key_for_bytes(
-        &self,
-        bytes: usize,
-    ) -> Result<DataKey, KeyGenerationError> {
+#[async_trait(?Send)]
+impl<K> KeyProvider for CachingKeyWrapper<K>
+where K: KeyProvider {
+    async fn generate_data_key(&self, bytes: usize) -> Result<DataKey, KeyGenerationError> {
         if let Some(cached_key) = self.get_and_increment_cached_encryption_key(bytes)? {
             return Ok(cached_key);
         }
 
-        let key = self.provider.generate_data_key().await?;
+        let key = self.provider.generate_data_key(bytes).await?;
 
         self.cache_encryption_key(bytes, key.clone())?;
 
         Ok(key)
     }
 
-    pub async fn decrypt_data_key(
+    async fn decrypt_data_key(
         &self,
         encrypted_key: &Vec<u8>,
     ) -> Result<Key<U16>, KeyDecryptionError> {
@@ -332,7 +327,7 @@ mod tests {
             Ok(Key::clone_from_slice(&test_decrypt_bytes(encrypted_key)))
         }
 
-        async fn generate_data_key(&self) -> Result<DataKey, KeyGenerationError> {
+        async fn generate_data_key(&self, _bytes: usize) -> Result<DataKey, KeyGenerationError> {
             let count = self.generate_counter.fetch_add(1, Ordering::Relaxed);
             // Generate a data key that is just the current count for all bytes
             let key = Key::clone_from_slice(&[count; 16]);
@@ -362,11 +357,11 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        assert!(cache.get_or_generate_data_key_for_bytes(10).await.is_ok());
+        assert!(cache.generate_data_key(10).await.is_ok());
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
-        assert!(cache.get_or_generate_data_key_for_bytes(10).await.is_ok());
+        assert!(cache.generate_data_key(10).await.is_ok());
 
         // Not incremented because cache was used
         assert_eq!(cache.provider.get_generate_count(), 1);
@@ -378,17 +373,17 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        assert!(cache.get_or_generate_data_key_for_bytes(1).await.is_ok());
+        assert!(cache.generate_data_key(1).await.is_ok());
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
         for _ in 0..9 {
-            assert!(cache.get_or_generate_data_key_for_bytes(1).await.is_ok());
+            assert!(cache.generate_data_key(1).await.is_ok());
         }
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
-        assert!(cache.get_or_generate_data_key_for_bytes(1).await.is_ok());
+        assert!(cache.generate_data_key(1).await.is_ok());
 
         // Incremented because 11th message needed new data key
         assert_eq!(cache.provider.get_generate_count(), 2);
@@ -400,13 +395,13 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        assert!(cache.get_or_generate_data_key_for_bytes(10).await.is_ok()); // 10
-        assert!(cache.get_or_generate_data_key_for_bytes(30).await.is_ok()); // 40
-        assert!(cache.get_or_generate_data_key_for_bytes(60).await.is_ok()); // 100
+        assert!(cache.generate_data_key(10).await.is_ok()); // 10
+        assert!(cache.generate_data_key(30).await.is_ok()); // 40
+        assert!(cache.generate_data_key(60).await.is_ok()); // 100
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
-        assert!(cache.get_or_generate_data_key_for_bytes(1).await.is_ok()); // 101
+        assert!(cache.generate_data_key(1).await.is_ok()); // 101
 
         assert_eq!(cache.provider.get_generate_count(), 2);
     }
@@ -417,7 +412,7 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        assert!(cache.get_or_generate_data_key_for_bytes(10).await.is_ok());
+        assert!(cache.generate_data_key(10).await.is_ok());
         assert_eq!(cache.provider.get_generate_count(), 1);
 
         std::thread::sleep(Duration::from_millis(8));
@@ -426,7 +421,7 @@ mod tests {
 
         std::thread::sleep(Duration::from_millis(8));
 
-        assert!(cache.get_or_generate_data_key_for_bytes(10).await.is_ok());
+        assert!(cache.generate_data_key(10).await.is_ok());
         assert_eq!(cache.provider.get_generate_count(), 2);
     }
 
@@ -437,7 +432,7 @@ mod tests {
         assert_eq!(cache.provider.get_generate_count(), 0);
 
         let DataKey { encrypted_key, .. } = cache
-            .get_or_generate_data_key_for_bytes(10)
+            .generate_data_key(10)
             .await
             .expect("Expected generate to succeed");
 
