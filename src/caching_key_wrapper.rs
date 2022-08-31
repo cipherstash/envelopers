@@ -327,7 +327,7 @@ mod tests {
             Ok(Key::clone_from_slice(&test_decrypt_bytes(encrypted_key)))
         }
 
-        async fn generate_data_key(&self, _bytes: usize) -> Result<DataKey, KeyGenerationError> {
+        async fn generate_data_key(&self, _bytes_to_encrypt: usize) -> Result<DataKey, KeyGenerationError> {
             let count = self.generate_counter.fetch_add(1, Ordering::Relaxed);
             // Generate a data key that is just the current count for all bytes
             let key = Key::clone_from_slice(&[count; 16]);

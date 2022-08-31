@@ -17,7 +17,14 @@ pub struct DataKey {
 
 #[async_trait(?Send)]
 pub trait KeyProvider {
-    async fn generate_data_key(&self, bytes: usize) -> Result<DataKey, KeyGenerationError>;
+    /// Generate a [`DataKey`] to encrypt a specific number of bytes
+    ///
+    /// # Arguments
+    ///
+    /// * `bytes_to_encrypt` - The number of bytes that this key will be used to encrypt
+    ///
+    async fn generate_data_key(&self, bytes_to_encrypt: usize) -> Result<DataKey, KeyGenerationError>;
+    /// Decrypt an encrypted key and return the plaintext key
     async fn decrypt_data_key(
         &self,
         encrypted_key: &Vec<u8>,
@@ -26,8 +33,8 @@ pub trait KeyProvider {
 
 #[async_trait(?Send)]
 impl KeyProvider for Box<dyn KeyProvider> {
-    async fn generate_data_key(&self, bytes: usize) -> Result<DataKey, KeyGenerationError> {
-        (**self).generate_data_key(bytes).await
+    async fn generate_data_key(&self, bytes_to_encrypt: usize) -> Result<DataKey, KeyGenerationError> {
+        (**self).generate_data_key(bytes_to_encrypt).await
     }
 
     async fn decrypt_data_key(
