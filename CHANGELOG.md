@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## Changed
+
+- Updated `KeyProvider` trait to pass through bytes to be encrypted
+- Updated `CachingKeyWrapper` to implement `KeyProvider`
+- Made `aws-kms` and `cache` features on by default
+
 ## [0.4.1]
 
 ## Changed

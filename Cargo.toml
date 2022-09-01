@@ -16,7 +16,6 @@ base64 = "0.13.0"
 futures = "0.3.21"
 itertools = "0.10.3"
 
-aws-config = "0.10.1"
 aws-smithy-client = { version = "0.40.2", features = [ "test-util" ] }
 aws-smithy-http = "0.40.2"
 
@@ -32,10 +31,12 @@ lru = "0.7.5"
 zeroize = { version = "1.5.5", features = [ "zeroize_derive" ] }
 
 aws-sdk-kms = { version = "0.10.1", optional = true }
+aws-config = { version = "0.10.1", optional = true }
 
 [features]
-# Enable the KMS Key Provider
-aws-kms = ["dep:aws-sdk-kms"]
+default = ["aws-kms", "cache"]
+aws-kms = ["dep:aws-sdk-kms", "dep:aws-config"]
+cache = []
 
 [[example]]
 name = "kms"
