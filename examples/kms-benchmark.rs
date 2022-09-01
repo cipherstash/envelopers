@@ -1,5 +1,5 @@
 use aws_sdk_kms::Client;
-use envelopers::{CacheOptions, EnvelopeCipher, KMSKeyProvider};
+use envelopers::{CacheOptions, CachingKeyWrapper, EnvelopeCipher, KMSKeyProvider};
 use futures::future::join_all;
 use itertools::Itertools;
 use rand::{distributions::Alphanumeric, Rng};
@@ -55,14 +55,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .expect("Please export CS_KEY_ID environment variable with your AWS KMS key id."),
     );
 
-    let cipher: EnvelopeCipher<KMSKeyProvider> = EnvelopeCipher::init(
-        provider,
-        CacheOptions::default()
-            .with_max_age(Duration::from_secs(30))
-            .with_max_bytes(10 * 1024)
-            .with_max_messages(100)
-            .with_max_entries(100),
-    );
+    let cipher: EnvelopeCipher<CachingKeyWrapper<KMSKeyProvider>> =
+        EnvelopeCipher::init(CachingKeyWrapper::new(
+            provider,
+            CacheOptions::default()
+                .with_max_age(Duration::from_secs(30))
+                .with_max_bytes(10 * 1024)
+                .with_max_messages(100)
+                .with_max_entries(100),
+        ));
 
     let data: Vec<String> = (0..MESSAGE_COUNT)
         .map(|_| {

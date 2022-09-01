@@ -1,8 +1,8 @@
 use async_trait::async_trait;
-use aws_config::RetryConfig;
 use aws_sdk_kms::model::DataKeySpec;
 use aws_sdk_kms::types::Blob;
 use aws_sdk_kms::{Client, Config, Credentials, Region};
+use aws_config::RetryConfig;
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
 use crate::key_provider::{DataKey, KeyProvider};
@@ -61,7 +61,7 @@ impl KMSKeyProvider {
 
 #[async_trait(?Send)]
 impl KeyProvider for KMSKeyProvider {
-    async fn generate_data_key(&self) -> Result<DataKey, KeyGenerationError> {
+    async fn generate_data_key(&self, _bytes_to_encrypt: usize) -> Result<DataKey, KeyGenerationError> {
         let mut response = self
             .client
             .generate_data_key()
@@ -190,7 +190,7 @@ mod tests {
                 let provider = KMSKeyProvider::new(client, key_id.into());
 
                 let key = provider
-                    .generate_data_key()
+                    .generate_data_key(0)
                     .await
                     .expect("Failed to generate data key");
 
@@ -213,7 +213,7 @@ mod tests {
             |client| async move {
                 let provider = KMSKeyProvider::new(client, key_id.into());
 
-                let result = provider.generate_data_key().await;
+                let result = provider.generate_data_key(0).await;
 
                 assert_eq!(
                     result
@@ -242,7 +242,7 @@ mod tests {
             |client| async move {
                 let provider = KMSKeyProvider::new(client, key_id.into());
 
-                let result = provider.generate_data_key().await;
+                let result = provider.generate_data_key(0).await;
 
                 assert_eq!(
                     result
@@ -272,7 +272,7 @@ mod tests {
             |client| async move {
                 let provider = KMSKeyProvider::new(client, key_id.into());
 
-                let result = provider.generate_data_key().await;
+                let result = provider.generate_data_key(0).await;
 
                 assert_eq!(
                     result
@@ -296,7 +296,7 @@ mod tests {
             |client| async move {
                 let provider = KMSKeyProvider::new(client, key_id.into());
 
-                let result = provider.generate_data_key().await;
+                let result = provider.generate_data_key(0).await;
 
                 assert_eq!(
                     result

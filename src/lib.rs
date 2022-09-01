@@ -13,7 +13,7 @@
 //! The `SimpleKeyProvider` allows envelope encryption to be used with a local key.
 //!
 //! ```rust
-//! use envelopers::{EnvelopeCipher, SimpleKeyProvider, CacheOptions};
+//! use envelopers::{EnvelopeCipher, SimpleKeyProvider};
 //!
 //! # use tokio::runtime::Runtime;
 //! # let rt = Runtime::new().unwrap();
@@ -25,7 +25,6 @@
 //!
 //! let cipher: EnvelopeCipher<SimpleKeyProvider> = EnvelopeCipher::init(
 //!     key_provider,
-//!     CacheOptions::default()
 //! );
 //! let er = cipher.encrypt(b"hey there monkey boy").await.unwrap();
 //! #
@@ -35,7 +34,7 @@
 //! ## Encoding a CipherText
 //!
 //! ```rust
-//! # use envelopers::{EnvelopeCipher, SimpleKeyProvider, CacheOptions};
+//! # use envelopers::{EnvelopeCipher, SimpleKeyProvider};
 //! #
 //! # use tokio::runtime::Runtime;
 //! # let rt = Runtime::new().unwrap();
@@ -47,7 +46,6 @@
 //! #
 //! # let cipher: EnvelopeCipher<SimpleKeyProvider> = EnvelopeCipher::init(
 //! #   key_provider,
-//! #   CacheOptions::default()
 //! # );
 //! #
 //! # let er = cipher.encrypt(b"hey there monkey boy").await.unwrap();
@@ -59,7 +57,7 @@
 //!
 //! ## Decrypting a CipherText
 //! ```rust
-//! use envelopers::{EnvelopeCipher, SimpleKeyProvider, EncryptedRecord, CacheOptions};
+//! use envelopers::{EnvelopeCipher, SimpleKeyProvider, EncryptedRecord};
 //!
 //! #
 //! # use tokio::runtime::Runtime;
@@ -72,7 +70,6 @@
 //! #
 //! # let cipher: EnvelopeCipher<SimpleKeyProvider> = EnvelopeCipher::init(
 //! #    key_provider,
-//! #    CacheOptions::default()
 //! # );
 //! # let er = cipher.encrypt(b"hey there monkey boy").await.unwrap();
 //! # let bytes = er.to_vec().unwrap();
@@ -87,16 +84,19 @@
 //! ```
 
 pub mod errors;
-mod key_provider;
 
-mod caching_key_wrapper;
+mod key_provider;
 mod simple_key_provider;
 
 #[cfg(feature = "aws-kms")]
 mod kms_key_provider;
 
+#[cfg(feature = "cache")]
+mod caching_key_wrapper;
+
 pub use crate::key_provider::{DataKey, KeyProvider};
 
+#[cfg(feature = "cache")]
 pub use crate::caching_key_wrapper::{CacheOptions, CachingKeyWrapper};
 pub use crate::simple_key_provider::SimpleKeyProvider;
 
@@ -138,7 +138,7 @@ pub struct EnvelopeCipher<K, R = ChaChaRng>
 where
     R: SeedableRng + RngCore,
 {
-    pub wrapper: CachingKeyWrapper<K>,
+    pub provider: K,
     pub rng: RefCell<R>,
 }
 
@@ -147,9 +147,9 @@ where
     K: KeyProvider,
     R: SeedableRng + RngCore,
 {
-    pub fn init(key_provider: K, options: CacheOptions) -> Self {
+    pub fn init(provider: K) -> Self {
         Self {
-            wrapper: CachingKeyWrapper::new(key_provider, options),
+            provider,
             rng: RefCell::new(R::from_entropy()),
         }
     }
@@ -165,7 +165,7 @@ where
         encrypted_record: &EncryptedRecord,
     ) -> Result<Vec<u8>, DecryptionError> {
         let key = self
-            .wrapper
+            .provider
             .decrypt_data_key(encrypted_record.encrypted_key.as_ref())
             .await?;
 
@@ -185,10 +185,7 @@ where
     pub async fn encrypt(&self, msg: &[u8]) -> Result<EncryptedRecord, EncryptionError> {
         let mut nonce_data = [0u8; 12];
 
-        let data_key = self
-            .wrapper
-            .get_or_generate_data_key_for_bytes(msg.len())
-            .await?;
+        let data_key = self.provider.generate_data_key(msg.len()).await?;
 
         let key_id = data_key.key_id;
 
@@ -217,12 +214,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{EnvelopeCipher, KeyProvider, SimpleKeyProvider};
+    use crate::{CacheOptions, CachingKeyWrapper, EnvelopeCipher, KeyProvider, SimpleKeyProvider};
 
     #[tokio::test]
     async fn test_encrypt_decrypt() {
         let provider: SimpleKeyProvider = SimpleKeyProvider::init([1; 16]);
-        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider, Default::default());
+        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
 
         let message = "hello".as_bytes();
 
@@ -235,8 +232,22 @@ mod tests {
     #[tokio::test]
     async fn test_encrypt_decrypt_boxed() {
         let provider: SimpleKeyProvider = SimpleKeyProvider::init([1; 16]);
-        let cipher: EnvelopeCipher<Box<dyn KeyProvider>> =
-            EnvelopeCipher::init(Box::new(provider), Default::default());
+        let cipher: EnvelopeCipher<Box<dyn KeyProvider>> = EnvelopeCipher::init(Box::new(provider));
+
+        let message = "hello".as_bytes();
+
+        let record = cipher.encrypt(message).await.unwrap();
+        let decrypted = cipher.decrypt(&record).await.unwrap();
+
+        assert_eq!(String::from_utf8(decrypted).unwrap(), "hello");
+    }
+
+    #[tokio::test]
+    async fn test_encrypt_decrypt_cache() {
+        let provider: CachingKeyWrapper<SimpleKeyProvider> =
+            CachingKeyWrapper::new(SimpleKeyProvider::init([1; 16]), CacheOptions::default());
+
+        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
 
         let message = "hello".as_bytes();
 

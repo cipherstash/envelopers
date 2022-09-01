@@ -105,7 +105,7 @@ impl<R: SeedableRng + RngCore> KeyProvider for SimpleKeyProvider<R> {
         return Ok(*Key::from_slice(&data_key));
     }
 
-    async fn generate_data_key(&self) -> Result<DataKey, KeyGenerationError> {
+    async fn generate_data_key(&self, _bytes: usize) -> Result<DataKey, KeyGenerationError> {
         let key = Key::from_slice(&self.kek);
         let cipher = AesGcm::<Aes128, U16>::new(key);
 
@@ -154,7 +154,7 @@ mod tests {
 
         let DataKey {
             encrypted_key, key, ..
-        } = provider.generate_data_key().await.unwrap();
+        } = provider.generate_data_key(0).await.unwrap();
 
         assert_eq!(
             key,
@@ -168,7 +168,7 @@ mod tests {
 
         let DataKey {
             encrypted_key, key, ..
-        } = provider.generate_data_key().await.unwrap();
+        } = provider.generate_data_key(0).await.unwrap();
 
         assert_eq!(
             key,
@@ -182,7 +182,7 @@ mod tests {
 
         let second: SimpleKeyProvider = SimpleKeyProvider::init([1; 16]);
 
-        let DataKey { encrypted_key, .. } = first.generate_data_key().await.unwrap();
+        let DataKey { encrypted_key, .. } = first.generate_data_key(0).await.unwrap();
 
         assert_eq!(
             second
@@ -200,7 +200,7 @@ mod tests {
 
         let DataKey {
             mut encrypted_key, ..
-        } = provider.generate_data_key().await.unwrap();
+        } = provider.generate_data_key(0).await.unwrap();
 
         // Decrypts data key fine
         assert!(provider.decrypt_data_key(&encrypted_key).await.is_ok());
@@ -225,7 +225,7 @@ mod tests {
 
         let DataKey {
             mut encrypted_key, ..
-        } = provider.generate_data_key().await.unwrap();
+        } = provider.generate_data_key(0).await.unwrap();
 
         // Decrypts data key fine
         assert!(provider.decrypt_data_key(&encrypted_key).await.is_ok());
