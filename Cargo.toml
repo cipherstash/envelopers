@@ -34,7 +34,7 @@ aws-sdk-kms = { version = "0.10.1", optional = true }
 aws-config = { version = "0.10.1", optional = true }
 
 [features]
-default = ["aws-kms", "cache", "tokio"]
+default = ["aws-kms", "cache"]
 aws-kms = ["dep:aws-sdk-kms", "dep:aws-config"]
 cache = []
 tokio = ["aws-sdk-kms?/rt-tokio"]
