@@ -1,6 +1,6 @@
 [package]
 name = "envelopers"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 license-file = "LICENSE"
 readme = "README.md"
@@ -37,6 +37,7 @@ aws-config = { version = "0.10.1", optional = true }
 default = ["aws-kms", "cache"]
 aws-kms = ["dep:aws-sdk-kms", "dep:aws-config"]
 cache = []
+tokio = ["aws-sdk-kms?/rt-tokio"]
 
 [[example]]
 name = "kms"
