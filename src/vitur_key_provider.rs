@@ -5,8 +5,6 @@ use aes_gcm::aes::cipher::consts::U16;
 
 use aes_gcm::{Key};
 use async_trait::async_trait;
-use hyper::http::{Request, Method, Uri};
-use hyper::{Client, Body};
 use serde::{Deserialize, Serialize};
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
@@ -37,7 +35,7 @@ pub struct ViturKeyProvider {
 
 impl ViturKeyProvider {
     pub fn new(host: String, key_id: String) -> Self {
-        Self { host, key_id }
+        Self { key_id, host }
     }
 }
 
@@ -48,56 +46,33 @@ impl KeyProvider for ViturKeyProvider {
         encrypted_key: &Vec<u8>,
     ) -> Result<Key<U16>, KeyDecryptionError> {
 
-        let client = Client::new();
-
-        let uri = Uri::builder()
-            .scheme("http")
-            .authority(self.host.to_string())
-            .path_and_query(format!("/api/keys/{}/decrypt", self.key_id))
-            .build()
-            .unwrap();
+        let client = reqwest::Client::new();
 
         let vdk = ViturEncryptedDataKey {
             data_key: encode_config(&encrypted_key, base64::URL_SAFE_NO_PAD)
         };
 
-        let req = Request::builder()
-            .method(Method::POST)
-            .uri(uri)
-            .header("Content-Type", "application/json")
-            .body(Body::from(serde_json::to_string(&vdk).unwrap()))
-            .expect("request builder");
+        let res = client.post(format!("{}/api/keys/{}/decrypt", self.host, self.key_id))
+            .json(&vdk)
+            .send()
+            .await.unwrap();
 
-        let resp = client.request(req).await.unwrap();
-        let buf = hyper::body::to_bytes(resp).await.unwrap();
-        let dk: ViturDataKey = serde_json::from_slice(&buf[..]).unwrap();
+        let dk: ViturDataKey = res.json().await.unwrap();
         let decoded = decode_config(&dk.dk, base64::URL_SAFE_NO_PAD).unwrap();
 
         return Ok(*Key::from_slice(&decoded));
     }
 
     async fn generate_data_key(&self, _bytes: usize) -> Result<DataKey, KeyGenerationError> {
-        let client = Client::new();
 
-        let uri = Uri::builder()
-            .scheme("http")
-            .authority(self.host.to_string())
-            .path_and_query(format!("/api/keys/{}/gen-data-key", self.key_id))
-            .build()
-            .unwrap();
+        let client = reqwest::Client::new();
 
-        let req = Request::builder()
-            .method(Method::POST)
-            .uri(uri)
-            .header("Content-Type", "application/json")
-            .body(Body::from(""))
-            .expect("request builder");
-
-        let resp = client.request(req).await.unwrap();
+        let res = client.post(format!("{}/api/keys/{}/gen-data-key", self.host, self.key_id))
+            .send()
+            .await.unwrap();
 
         // TODO: We probably should use a fast binary format instead of JSON but 🤪
-        let buf = hyper::body::to_bytes(resp).await.unwrap();
-        let dkp: ViturDataKeyPair = serde_json::from_slice(&buf[..]).unwrap();
+        let dkp: ViturDataKeyPair = res.json().await.unwrap();
         
         return Ok(DataKey {
             key: *Key::from_slice(&decode_config(dkp.dk, base64::URL_SAFE_NO_PAD).unwrap()),
