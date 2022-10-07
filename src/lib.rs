@@ -92,6 +92,8 @@ mod simple_key_provider;
 #[cfg(feature = "aws-kms")]
 mod kms_key_provider;
 
+mod vitur_key_provider;
+
 #[cfg(feature = "cache")]
 mod caching_key_wrapper;
 
@@ -103,6 +105,9 @@ pub use crate::simple_key_provider::SimpleKeyProvider;
 
 #[cfg(feature = "aws-kms")]
 pub use crate::kms_key_provider::KMSKeyProvider;
+
+//#[cfg(feature = "vitur")]
+pub use crate::vitur_key_provider::ViturKeyProvider;
 
 pub use aes_gcm::aes::cipher::consts::U16;
 pub use aes_gcm::Key;
