@@ -1,9 +1,9 @@
-use envelopers::{ViturKeyProvider, KeyProvider, EnvelopeCipher};
+use envelopers::{ViturKeyProvider, EnvelopeCipher};
 use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let host = "localhost:4000";
+    let host = "https://e9d9-27-33-69-101.au.ngrok.io";
     let key_id = "70442f1d-630f-4546-8109-b1e6521860d3";
     let provider = ViturKeyProvider::new(host.into(), key_id.into());
 
