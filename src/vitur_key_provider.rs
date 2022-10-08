@@ -18,8 +18,13 @@ struct ViturDataKeyPair {
 }
 
 #[derive(Serialize)]
+struct DataKeyRequest {
+    tag: String
+}
+
+#[derive(Serialize)]
 pub struct ViturEncryptedDataKey {
-    data_key: String // TODO: Change this to wdk
+    wdk: String
 }
 
 #[derive(Deserialize, Debug)]
@@ -49,7 +54,7 @@ impl KeyProvider for ViturKeyProvider {
         let client = reqwest::Client::new();
 
         let vdk = ViturEncryptedDataKey {
-            data_key: encode_config(&encrypted_key, base64::URL_SAFE_NO_PAD)
+            wdk: encode_config(&encrypted_key, base64::URL_SAFE_NO_PAD)
         };
 
         let res = client.post(format!("{}/api/keys/{}/decrypt", self.host, self.key_id))
@@ -63,11 +68,13 @@ impl KeyProvider for ViturKeyProvider {
         return Ok(*Key::from_slice(&decoded));
     }
 
-    async fn generate_data_key(&self, _bytes: usize) -> Result<DataKey, KeyGenerationError> {
-
+    async fn generate_data_key(&self, _bytes: usize, tag: Option<String>) -> Result<DataKey, KeyGenerationError> {
         let client = reqwest::Client::new();
-
+        let data_key_request = DataKeyRequest {
+            tag: tag.ok_or("Tag must be provided").unwrap()
+        };
         let res = client.post(format!("{}/api/keys/{}/gen-data-key", self.host, self.key_id))
+            .json(&data_key_request)
             .send()
             .await.unwrap();
 

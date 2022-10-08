@@ -179,9 +179,19 @@ impl<K: KeyProvider, R: SafeRng> EnvelopeCipher<K, R> {
     }
 
     pub async fn encrypt(&self, msg: &[u8]) -> Result<EncryptedRecord, EncryptionError> {
+        self.encrypt_with_tag(msg, None).await
+    }
+
+    /* 
+     * Encrypts a message with a tag applied to the *Data Key*.
+     * 
+     * DO NOT put sensitive data in the tag as it will be sent to the key server
+     * and will be stored in plaintex. 
+    */
+    pub async fn encrypt_with_tag(&self, msg: &[u8], tag: Option<String>) -> Result<EncryptedRecord, EncryptionError> {
         let mut nonce_data = [0u8; 12];
 
-        let data_key = self.provider.generate_data_key(msg.len()).await?;
+        let data_key = self.provider.generate_data_key(msg.len(), tag).await?;
 
         let key_id = data_key.key_id;
 

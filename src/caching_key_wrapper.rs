@@ -204,14 +204,17 @@ impl<K> KeyProvider for CachingKeyWrapper<K>
 where
     K: KeyProvider,
 {
-    async fn generate_data_key(&self, bytes: usize) -> Result<DataKey, KeyGenerationError> {
-        if let Some(cached_key) = self.get_and_increment_cached_encryption_key(bytes).await {
+    async fn generate_data_key(
+        &self,
+        bytes: usize,
+        tag: Option<String>,
+    ) -> Result<DataKey, KeyGenerationError> {
+        if let Some(cached_key) = self.get_and_increment_cached_encryption_key(bytes)? {
             return Ok(cached_key);
         }
 
-        let key = self.provider.generate_data_key(bytes).await?;
-
-        self.cache_encryption_key(bytes, key.clone()).await;
+        let key = self.provider.generate_data_key(bytes, tag).await?;
+        self.cache_encryption_key(bytes, key.clone())?;
 
         Ok(key)
     }
@@ -303,6 +306,7 @@ mod tests {
         async fn generate_data_key(
             &self,
             _bytes_to_encrypt: usize,
+            tag: Option<String>,
         ) -> Result<DataKey, KeyGenerationError> {
             let count = self.generate_counter.fetch_add(1, Ordering::Relaxed);
             // Generate a data key that is just the current count for all bytes
@@ -333,11 +337,11 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        assert!(cache.generate_data_key(10).await.is_ok());
+        assert!(cache.generate_data_key(10, None).await.is_ok());
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
-        assert!(cache.generate_data_key(10).await.is_ok());
+        assert!(cache.generate_data_key(10, None).await.is_ok());
 
         // Not incremented because cache was used
         assert_eq!(cache.provider.get_generate_count(), 1);
@@ -349,17 +353,17 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        assert!(cache.generate_data_key(1).await.is_ok());
+        assert!(cache.generate_data_key(1, None).await.is_ok());
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
         for _ in 0..9 {
-            assert!(cache.generate_data_key(1).await.is_ok());
+            assert!(cache.generate_data_key(1, None).await.is_ok());
         }
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
-        assert!(cache.generate_data_key(1).await.is_ok());
+        assert!(cache.generate_data_key(1, None).await.is_ok());
 
         // Incremented because 11th message needed new data key
         assert_eq!(cache.provider.get_generate_count(), 2);
@@ -371,13 +375,13 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        assert!(cache.generate_data_key(10).await.is_ok()); // 10
-        assert!(cache.generate_data_key(30).await.is_ok()); // 40
-        assert!(cache.generate_data_key(60).await.is_ok()); // 100
+        assert!(cache.generate_data_key(10, None).await.is_ok()); // 10
+        assert!(cache.generate_data_key(30, None).await.is_ok()); // 40
+        assert!(cache.generate_data_key(60, None).await.is_ok()); // 100
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
-        assert!(cache.generate_data_key(1).await.is_ok()); // 101
+        assert!(cache.generate_data_key(1, None).await.is_ok()); // 101
 
         assert_eq!(cache.provider.get_generate_count(), 2);
     }
@@ -388,7 +392,7 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        assert!(cache.generate_data_key(10).await.is_ok());
+        assert!(cache.generate_data_key(10, None).await.is_ok());
         assert_eq!(cache.provider.get_generate_count(), 1);
 
         std::thread::sleep(Duration::from_millis(8));
@@ -397,7 +401,7 @@ mod tests {
 
         std::thread::sleep(Duration::from_millis(8));
 
-        assert!(cache.generate_data_key(10).await.is_ok());
+        assert!(cache.generate_data_key(10, None).await.is_ok());
         assert_eq!(cache.provider.get_generate_count(), 2);
     }
 
@@ -408,7 +412,7 @@ mod tests {
         assert_eq!(cache.provider.get_generate_count(), 0);
 
         let DataKey { encrypted_key, .. } = cache
-            .generate_data_key(10)
+            .generate_data_key(10, None)
             .await
             .expect("Expected generate to succeed");
 
