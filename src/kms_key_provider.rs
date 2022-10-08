@@ -101,6 +101,7 @@ impl KeyProvider for KMSKeyProvider {
     async fn decrypt_data_key(
         &self,
         encrypted_key: &Vec<u8>,
+        _context: Option<String>
     ) -> Result<Key<U16>, KeyDecryptionError> {
         let response = self
             .client

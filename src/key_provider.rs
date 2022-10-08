@@ -32,6 +32,7 @@ pub trait KeyProvider: Send + Sync {
     async fn decrypt_data_key(
         &self,
         encrypted_key: &Vec<u8>,
+        context: Option<String>
     ) -> Result<Key<U16>, KeyDecryptionError>;
 }
 
@@ -48,7 +49,8 @@ impl KeyProvider for Box<dyn KeyProvider> {
     async fn decrypt_data_key(
         &self,
         encrypted_key: &Vec<u8>,
+        context: Option<String>
     ) -> Result<Key<U16>, KeyDecryptionError> {
-        (**self).decrypt_data_key(encrypted_key).await
+        (**self).decrypt_data_key(encrypted_key, context).await
     }
 }

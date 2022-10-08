@@ -23,8 +23,9 @@ struct DataKeyRequest {
 }
 
 #[derive(Serialize)]
-pub struct ViturEncryptedDataKey {
-    wdk: String
+pub struct DecryptRequest {
+    wdk: String,
+    context: Option<String>
 }
 
 #[derive(Deserialize, Debug)]
@@ -49,12 +50,14 @@ impl KeyProvider for ViturKeyProvider {
     async fn decrypt_data_key(
         &self,
         encrypted_key: &Vec<u8>,
+        context: Option<String>
     ) -> Result<Key<U16>, KeyDecryptionError> {
 
         let client = reqwest::Client::new();
 
-        let vdk = ViturEncryptedDataKey {
-            wdk: encode_config(&encrypted_key, base64::URL_SAFE_NO_PAD)
+        let vdk = DecryptRequest {
+            wdk: encode_config(&encrypted_key, base64::URL_SAFE_NO_PAD),
+            context
         };
 
         let res = client.post(format!("{}/api/keys/{}/decrypt", self.host, self.key_id))

@@ -18,7 +18,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     println!("Encrypted: {:?}", encrypted);
 
-    let decrypted = cipher.decrypt(&encrypted).await?;
+    let decrypted = cipher
+        .decrypt_with_context(&encrypted, Some("db:postgres:test".to_string()))
+        .await?;
 
     println!("Decrypted: {}", String::from_utf8(decrypted)?);
 

@@ -160,9 +160,17 @@ impl<K: KeyProvider, R: SafeRng> EnvelopeCipher<K, R> {
         &self,
         encrypted_record: &EncryptedRecord,
     ) -> Result<Vec<u8>, DecryptionError> {
+        self.decrypt_with_context(encrypted_record, None).await
+    }
+
+    pub async fn decrypt_with_context(
+        &self,
+        encrypted_record: &EncryptedRecord,
+        context: Option<String>
+    ) -> Result<Vec<u8>, DecryptionError> {
         let key = self
             .provider
-            .decrypt_data_key(encrypted_record.encrypted_key.as_ref())
+            .decrypt_data_key(encrypted_record.encrypted_key.as_ref(), context)
             .await?;
 
         let aad = &encrypted_record.key_id;

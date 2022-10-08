@@ -222,12 +222,13 @@ where
     async fn decrypt_data_key(
         &self,
         encrypted_key: &Vec<u8>,
+        _context: Option<String>,
     ) -> Result<Key<U16>, KeyDecryptionError> {
         if let Some(cached_key) = self.get_cached_decryption_key(encrypted_key).await {
             return Ok(cached_key);
         }
 
-        let plaintext_key = self.provider.decrypt_data_key(encrypted_key).await?;
+        let plaintext_key = self.provider.decrypt_data_key(encrypted_key, None).await?;
 
         self.cache_decryption_key(encrypted_key, plaintext_key)
             .await;
@@ -298,6 +299,7 @@ mod tests {
         async fn decrypt_data_key(
             &self,
             encrypted_key: &Vec<u8>,
+            _context: Option<String>,
         ) -> Result<Key<U16>, KeyDecryptionError> {
             self.decrypt_counter.fetch_add(1, Ordering::Relaxed);
             Ok(Key::clone_from_slice(&test_decrypt_bytes(encrypted_key)))
@@ -306,7 +308,7 @@ mod tests {
         async fn generate_data_key(
             &self,
             _bytes_to_encrypt: usize,
-            tag: Option<String>,
+            _tag: Option<String>,
         ) -> Result<DataKey, KeyGenerationError> {
             let count = self.generate_counter.fetch_add(1, Ordering::Relaxed);
             // Generate a data key that is just the current count for all bytes
@@ -418,7 +420,7 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
-        assert!(cache.decrypt_data_key(&encrypted_key).await.is_ok());
+        assert!(cache.decrypt_data_key(&encrypted_key, None).await.is_ok());
 
         // No keys were decrypted because they were in the cache
         assert_eq!(cache.provider.get_decrypt_count(), 0);
@@ -431,14 +433,14 @@ mod tests {
         let key: Key<U16> = Key::clone_from_slice(&[1; 16]);
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .decrypt_data_key(&test_encrypt_bytes(&key), None)
             .await
             .is_ok());
 
         assert_eq!(cache.provider.get_decrypt_count(), 1);
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .decrypt_data_key(&test_encrypt_bytes(&key), None)
             .await
             .is_ok());
 
@@ -458,7 +460,7 @@ mod tests {
         let key: Key<U16> = Key::clone_from_slice(&[1; 16]);
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .decrypt_data_key(&test_encrypt_bytes(&key), None)
             .await
             .is_ok());
 
@@ -467,7 +469,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(8));
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .decrypt_data_key(&test_encrypt_bytes(&key), None)
             .await
             .is_ok());
 
@@ -476,7 +478,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(8));
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .decrypt_data_key(&test_encrypt_bytes(&key), None)
             .await
             .is_ok());
 
