@@ -26,6 +26,7 @@ pub trait KeyProvider: Send + Sync {
     async fn generate_data_key(
         &self,
         bytes_to_encrypt: usize,
+        tag: Option<String>
     ) -> Result<DataKey, KeyGenerationError>;
 
     /// Decrypt an encrypted key and return the plaintext key
@@ -40,8 +41,8 @@ impl KeyProvider for Box<dyn KeyProvider> {
     async fn generate_data_key(
         &self,
         bytes_to_encrypt: usize,
+        tag: Option<String>
     ) -> Result<DataKey, KeyGenerationError> {
-        (**self).generate_data_key(bytes_to_encrypt).await
     }
 
     async fn decrypt_data_key(

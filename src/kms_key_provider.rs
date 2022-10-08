@@ -61,7 +61,7 @@ impl KMSKeyProvider {
 
 #[async_trait]
 impl KeyProvider for KMSKeyProvider {
-    async fn generate_data_key(&self, _bytes_to_encrypt: usize) -> Result<DataKey, KeyGenerationError> {
+    async fn generate_data_key(&self, _bytes_to_encrypt: usize, _tag: Option<String>) -> Result<DataKey, KeyGenerationError> {
         let mut response = self
             .client
             .generate_data_key()
@@ -190,7 +190,7 @@ mod tests {
                 let provider = KMSKeyProvider::new(client, key_id.into());
 
                 let key = provider
-                    .generate_data_key(0)
+                    .generate_data_key(0, None)
                     .await
                     .expect("Failed to generate data key");
 
@@ -213,7 +213,7 @@ mod tests {
             |client| async move {
                 let provider = KMSKeyProvider::new(client, key_id.into());
 
-                let result = provider.generate_data_key(0).await;
+                let result = provider.generate_data_key(0, None).await;
 
                 assert_eq!(
                     result
@@ -242,7 +242,7 @@ mod tests {
             |client| async move {
                 let provider = KMSKeyProvider::new(client, key_id.into());
 
-                let result = provider.generate_data_key(0).await;
+                let result = provider.generate_data_key(0, None).await;
 
                 assert_eq!(
                     result
@@ -272,7 +272,7 @@ mod tests {
             |client| async move {
                 let provider = KMSKeyProvider::new(client, key_id.into());
 
-                let result = provider.generate_data_key(0).await;
+                let result = provider.generate_data_key(0, None).await;
 
                 assert_eq!(
                     result
@@ -296,7 +296,7 @@ mod tests {
             |client| async move {
                 let provider = KMSKeyProvider::new(client, key_id.into());
 
-                let result = provider.generate_data_key(0).await;
+                let result = provider.generate_data_key(0, None).await;
 
                 assert_eq!(
                     result
