@@ -114,8 +114,9 @@ pub use aes_gcm::Key;
 
 use aes_gcm::aead::{Aead, NewAead, Payload};
 use aes_gcm::{Aes128Gcm, Nonce};
-// Or `Aes256Gcm`
+use rand::rngs::ThreadRng;
 use async_mutex::Mutex as AsyncMutex;
+use rand::{RngCore, SeedableRng, thread_rng};
 use rand_chacha::ChaChaRng;
 use safe_rng::SafeRng;
 use serde::{Deserialize, Serialize};
@@ -123,9 +124,13 @@ use static_assertions::assert_impl_all;
 
 pub use errors::{DecryptionError, EncryptionError, KeyDecryptionError, KeyGenerationError};
 
+//pub type EncryptedKey = Arc<Mutex<Vec<u8>>>;
+pub type EncryptedKey = Vec<u8>;
+
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EncryptedRecord {
-    pub encrypted_key: Vec<u8>,
+    pub encrypted_key: EncryptedKey,
     pub ciphertext: Vec<u8>,
     pub nonce: [u8; 12],
     pub key_id: String,
@@ -160,9 +165,17 @@ impl<K: KeyProvider, R: SafeRng> EnvelopeCipher<K, R> {
         &self,
         encrypted_record: &EncryptedRecord,
     ) -> Result<Vec<u8>, DecryptionError> {
+        self.decrypt_with_context(encrypted_record, None).await
+    }
+
+    pub async fn decrypt_with_context(
+        &self,
+        encrypted_record: &EncryptedRecord,
+        context: Option<String>
+    ) -> Result<Vec<u8>, DecryptionError> {
         let key = self
             .provider
-            .decrypt_data_key(encrypted_record.encrypted_key.as_ref())
+            .decrypt_data_key(encrypted_record.encrypted_key.as_ref(), context)
             .await?;
 
         let aad = &encrypted_record.key_id;
@@ -179,7 +192,7 @@ impl<K: KeyProvider, R: SafeRng> EnvelopeCipher<K, R> {
     }
 
     pub async fn encrypt(&self, msg: &[u8]) -> Result<EncryptedRecord, EncryptionError> {
-        self.encrypt_with_tag(msg, None).await
+        self.encrypt_with_tag(msg, &None).await
     }
 
     /* 
@@ -188,11 +201,9 @@ impl<K: KeyProvider, R: SafeRng> EnvelopeCipher<K, R> {
      * DO NOT put sensitive data in the tag as it will be sent to the key server
      * and will be stored in plaintex. 
     */
-    pub async fn encrypt_with_tag(&self, msg: &[u8], tag: Option<String>) -> Result<EncryptedRecord, EncryptionError> {
+    pub async fn encrypt_with_tag(&self, msg: &[u8], tag: &Option<String>) -> Result<EncryptedRecord, EncryptionError> {
         let mut nonce_data = [0u8; 12];
-
-        let data_key = self.provider.generate_data_key(msg.len(), tag).await?;
-
+        let data_key = self.provider.generate_data_key(msg.len(), tag).await.unwrap(); //?;
         let key_id = data_key.key_id;
 
         {

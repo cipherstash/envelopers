@@ -1,5 +1,7 @@
 //! Trait for a KeyProvider
 
+use std::sync::Arc;
+
 use aes_gcm::aes::cipher::consts::U16;
 use aes_gcm::Key;
 use async_trait::async_trait;
@@ -26,13 +28,14 @@ pub trait KeyProvider: Send + Sync {
     async fn generate_data_key(
         &self,
         bytes_to_encrypt: usize,
-        tag: Option<String>
+        tag: &Option<String>
     ) -> Result<DataKey, KeyGenerationError>;
 
     /// Decrypt an encrypted key and return the plaintext key
     async fn decrypt_data_key(
         &self,
         encrypted_key: &Vec<u8>,
+        context: Option<String>
     ) -> Result<Key<U16>, KeyDecryptionError>;
 }
 
@@ -41,14 +44,16 @@ impl KeyProvider for Box<dyn KeyProvider> {
     async fn generate_data_key(
         &self,
         bytes_to_encrypt: usize,
-        tag: Option<String>
+        tag: &Option<String>
     ) -> Result<DataKey, KeyGenerationError> {
+        (**self).generate_data_key(bytes_to_encrypt, tag).await
     }
 
     async fn decrypt_data_key(
         &self,
         encrypted_key: &Vec<u8>,
+        context: Option<String>
     ) -> Result<Key<U16>, KeyDecryptionError> {
-        (**self).decrypt_data_key(encrypted_key).await
+        (**self).decrypt_data_key(encrypted_key, context).await
     }
 }

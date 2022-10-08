@@ -5,20 +5,23 @@ use std::error::Error;
 async fn main() -> Result<(), Box<dyn Error>> {
     let host = "http://localhost:4000";
     let key_id = "70442f1d-630f-4546-8109-b1e6521860d3";
-    let provider = ViturKeyProvider::new(host.into(), key_id.into());
+    let access_token = "your-jwt-here";
+    let provider = ViturKeyProvider::new(host.into(), key_id.into(), access_token.into());
 
     let cipher: EnvelopeCipher<ViturKeyProvider> = EnvelopeCipher::init(provider);
 
     let encrypted = cipher
         .encrypt_with_tag(
             "This is a great test string!".as_bytes(),
-            Some("user-123".to_string())
+            &Some("user-123".to_string())
         )
         .await?;
 
     println!("Encrypted: {:?}", encrypted);
 
-    let decrypted = cipher.decrypt(&encrypted).await?;
+    let decrypted = cipher
+        .decrypt_with_context(&encrypted, Some("db:postgres:test".to_string()))
+        .await?;
 
     println!("Decrypted: {}", String::from_utf8(decrypted)?);
 

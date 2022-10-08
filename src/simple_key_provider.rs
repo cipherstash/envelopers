@@ -88,6 +88,7 @@ impl<R: SafeRng> KeyProvider for SimpleKeyProvider<R> {
     async fn decrypt_data_key(
         &self,
         encrypted_key: &Vec<u8>,
+        _context: Option<String>
     ) -> Result<Key<U16>, KeyDecryptionError> {
         let key = Key::from_slice(&self.kek);
         let cipher = AesGcm::<Aes128, U16>::new(key);
@@ -105,7 +106,7 @@ impl<R: SafeRng> KeyProvider for SimpleKeyProvider<R> {
         return Ok(*Key::from_slice(&data_key));
     }
 
-    async fn generate_data_key(&self, _bytes: usize, _tag: Option<String>) -> Result<DataKey, KeyGenerationError> {
+    async fn generate_data_key(&self, _bytes: usize, _tag: &Option<String>) -> Result<DataKey, KeyGenerationError> {
         let key = Key::from_slice(&self.kek);
         let cipher = AesGcm::<Aes128, U16>::new(key);
 
@@ -156,11 +157,11 @@ mod tests {
 
         let DataKey {
             encrypted_key, key, ..
-        } = provider.generate_data_key(0, None).await.unwrap();
+        } = provider.generate_data_key(0, &None).await.unwrap();
 
         assert_eq!(
             key,
-            provider.decrypt_data_key(&encrypted_key).await.unwrap()
+            provider.decrypt_data_key(&encrypted_key, None).await.unwrap()
         );
     }
 
@@ -170,11 +171,11 @@ mod tests {
 
         let DataKey {
             encrypted_key, key, ..
-        } = provider.generate_data_key(0, None).await.unwrap();
+        } = provider.generate_data_key(0, &None).await.unwrap();
 
         assert_eq!(
             key,
-            provider.decrypt_data_key(&encrypted_key).await.unwrap()
+            provider.decrypt_data_key(&encrypted_key, None).await.unwrap()
         );
     }
 
@@ -184,11 +185,11 @@ mod tests {
 
         let second: SimpleKeyProvider = SimpleKeyProvider::init([1; 16]);
 
-        let DataKey { encrypted_key, .. } = first.generate_data_key(0, None).await.unwrap();
+        let DataKey { encrypted_key, .. } = first.generate_data_key(0, &None).await.unwrap();
 
         assert_eq!(
             second
-                .decrypt_data_key(&encrypted_key)
+                .decrypt_data_key(&encrypted_key, None)
                 .await
                 .map_err(|e| e.to_string())
                 .expect_err("Decrypting data key suceeded"),
@@ -202,10 +203,10 @@ mod tests {
 
         let DataKey {
             mut encrypted_key, ..
-        } = provider.generate_data_key(0, None).await.unwrap();
+        } = provider.generate_data_key(0, &None).await.unwrap();
 
         // Decrypts data key fine
-        assert!(provider.decrypt_data_key(&encrypted_key).await.is_ok());
+        assert!(provider.decrypt_data_key(&encrypted_key, None).await.is_ok());
 
         // Replace the nonce with a nonsense one
         encrypted_key[1..17]
@@ -213,7 +214,7 @@ mod tests {
 
         assert_eq!(
             provider
-                .decrypt_data_key(&encrypted_key)
+                .decrypt_data_key(&encrypted_key, None)
                 .await
                 .map_err(|e| e.to_string())
                 .expect_err("Decrypting data key succeeded"),
@@ -227,17 +228,17 @@ mod tests {
 
         let DataKey {
             mut encrypted_key, ..
-        } = provider.generate_data_key(0, None).await.unwrap();
+        } = provider.generate_data_key(0, &None).await.unwrap();
 
         // Decrypts data key fine
-        assert!(provider.decrypt_data_key(&encrypted_key).await.is_ok());
+        assert!(provider.decrypt_data_key(&encrypted_key, None).await.is_ok());
 
         // Replace key version with invalid one
         encrypted_key[0] = 5;
 
         assert_eq!(
             provider
-                .decrypt_data_key(&encrypted_key)
+                .decrypt_data_key(&encrypted_key, None)
                 .await
                 .map_err(|e| e.to_string())
                 .expect_err("Decrypting data key succeeded"),

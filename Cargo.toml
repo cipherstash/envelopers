@@ -10,7 +10,6 @@ repository = "https://github.com/cipherstash/envelopers"
 [dev-dependencies]
 hex-literal = "0.3.2"
 hex = "0.4.3"
-tokio = { version = "1.17.0", features = [ "macros", "rt-multi-thread" ] }
 http = "0.2"
 base64 = "0.13.0"
 futures = "0.3.21"
@@ -30,6 +29,7 @@ async-trait = "0.1.53"
 lru = "0.7.5"
 zeroize = { version = "1.5.5", features = [ "zeroize_derive" ] }
 static_assertions = "1.1.0"
+tokio = { version = "1.17.0", features = [ "macros", "rt-multi-thread" ] }
 
 ## TODO: Make this only required with the vitur feature
 ## Could probably just move it into a vitur crate

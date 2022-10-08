@@ -23,8 +23,9 @@ struct DataKeyRequest {
 }
 
 #[derive(Serialize)]
-pub struct ViturEncryptedDataKey {
-    wdk: String
+pub struct DecryptRequest {
+    wdk: String,
+    context: Option<String>
 }
 
 #[derive(Deserialize, Debug)]
@@ -35,12 +36,13 @@ pub struct ViturDataKey {
 #[derive(Debug)]
 pub struct ViturKeyProvider {
     host: String,
-    key_id: String
+    key_id: String,
+    access_token: String
 }
 
 impl ViturKeyProvider {
-    pub fn new(host: String, key_id: String) -> Self {
-        Self { key_id, host }
+    pub fn new(host: String, key_id: String, access_token: String) -> Self {
+        Self { key_id, host, access_token }
     }
 }
 
@@ -49,16 +51,19 @@ impl KeyProvider for ViturKeyProvider {
     async fn decrypt_data_key(
         &self,
         encrypted_key: &Vec<u8>,
+        context: Option<String>
     ) -> Result<Key<U16>, KeyDecryptionError> {
 
         let client = reqwest::Client::new();
 
-        let vdk = ViturEncryptedDataKey {
-            wdk: encode_config(&encrypted_key, base64::URL_SAFE_NO_PAD)
+        let vdk = DecryptRequest {
+            wdk: encode_config(&encrypted_key, base64::URL_SAFE_NO_PAD),
+            context
         };
 
         let res = client.post(format!("{}/api/keys/{}/decrypt", self.host, self.key_id))
             .json(&vdk)
+            .bearer_auth(&self.access_token)
             .send()
             .await.unwrap();
 
@@ -68,13 +73,14 @@ impl KeyProvider for ViturKeyProvider {
         return Ok(*Key::from_slice(&decoded));
     }
 
-    async fn generate_data_key(&self, _bytes: usize, tag: Option<String>) -> Result<DataKey, KeyGenerationError> {
+    async fn generate_data_key(&self, _bytes: usize, tag: &Option<String>) -> Result<DataKey, KeyGenerationError> {
         let client = reqwest::Client::new();
         let data_key_request = DataKeyRequest {
-            tag: tag.ok_or("Tag must be provided").unwrap()
+            tag: tag.as_ref().ok_or("Tag must be provided").unwrap().to_string()
         };
         let res = client.post(format!("{}/api/keys/{}/gen-data-key", self.host, self.key_id))
             .json(&data_key_request)
+            .bearer_auth(&self.access_token)
             .send()
             .await.unwrap();
 
