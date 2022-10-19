@@ -1,6 +1,6 @@
 [package]
 name = "envelopers"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2021"
 license-file = "LICENSE"
 readme = "README.md"
@@ -29,9 +29,12 @@ thiserror = "1.0.30"
 async-trait = "0.1.53"
 lru = "0.7.5"
 zeroize = { version = "1.5.5", features = [ "zeroize_derive" ] }
+static_assertions = "1.1.0"
 
 aws-sdk-kms = { version = "0.10.1", optional = true }
 aws-config = { version = "0.10.1", optional = true }
+async-mutex = "1.4.0"
+
 
 [features]
 default = ["aws-kms", "cache"]

@@ -84,6 +84,7 @@
 //! ```
 
 pub mod errors;
+pub mod safe_rng;
 
 mod key_provider;
 mod simple_key_provider;
@@ -109,10 +110,11 @@ pub use aes_gcm::Key;
 use aes_gcm::aead::{Aead, NewAead, Payload};
 use aes_gcm::{Aes128Gcm, Nonce};
 // Or `Aes256Gcm`
-use rand::{RngCore, SeedableRng};
+use async_mutex::Mutex as AsyncMutex;
 use rand_chacha::ChaChaRng;
+use safe_rng::SafeRng;
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
+use static_assertions::assert_impl_all;
 
 pub use errors::{DecryptionError, EncryptionError, KeyDecryptionError, KeyGenerationError};
 
@@ -134,32 +136,21 @@ impl EncryptedRecord {
     }
 }
 
-pub struct EnvelopeCipher<K, R = ChaChaRng>
-where
-    R: SeedableRng + RngCore,
-{
+pub struct EnvelopeCipher<K, R: SafeRng = ChaChaRng> {
     pub provider: K,
-    pub rng: RefCell<R>,
+    pub rng: AsyncMutex<R>,
 }
 
-impl<K, R> EnvelopeCipher<K, R>
-where
-    K: KeyProvider,
-    R: SeedableRng + RngCore,
-{
+impl<K, R: SafeRng> EnvelopeCipher<K, R> {
     pub fn init(provider: K) -> Self {
         Self {
             provider,
-            rng: RefCell::new(R::from_entropy()),
+            rng: AsyncMutex::new(R::from_entropy()),
         }
     }
 }
 
-impl<K, R> EnvelopeCipher<K, R>
-where
-    K: KeyProvider,
-    R: SeedableRng + RngCore,
-{
+impl<K: KeyProvider, R: SafeRng> EnvelopeCipher<K, R> {
     pub async fn decrypt(
         &self,
         encrypted_record: &EncryptedRecord,
@@ -189,7 +180,10 @@ where
 
         let key_id = data_key.key_id;
 
-        self.rng.borrow_mut().try_fill_bytes(&mut nonce_data)?;
+        {
+            let mut rng = self.rng.lock().await;
+            rng.try_fill_bytes(&mut nonce_data)?;
+        }
 
         let payload = Payload {
             msg,
@@ -211,6 +205,19 @@ where
         })
     }
 }
+
+// Ensure that all supported EnvelopeCiphers can be shared between threads
+assert_impl_all!(EnvelopeCipher<SimpleKeyProvider>: Send, Sync);
+assert_impl_all!(EnvelopeCipher<Box<dyn KeyProvider>>: Send, Sync);
+
+#[cfg(feature = "aws-kms")]
+assert_impl_all!(EnvelopeCipher<KMSKeyProvider>: Send, Sync);
+
+#[cfg(feature = "cache")]
+assert_impl_all!(EnvelopeCipher<CachingKeyWrapper<SimpleKeyProvider>>: Send, Sync);
+
+#[cfg(feature = "cache")]
+assert_impl_all!(EnvelopeCipher<CachingKeyWrapper<KMSKeyProvider>>: Send, Sync);
 
 #[cfg(test)]
 mod tests {
