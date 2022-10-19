@@ -208,9 +208,15 @@ impl<K: KeyProvider, R: SafeRng> EnvelopeCipher<K, R> {
 
 // Ensure that all supported EnvelopeCiphers can be shared between threads
 assert_impl_all!(EnvelopeCipher<SimpleKeyProvider>: Send, Sync);
-assert_impl_all!(EnvelopeCipher<KMSKeyProvider>: Send, Sync);
 assert_impl_all!(EnvelopeCipher<Box<dyn KeyProvider>>: Send, Sync);
+
+#[cfg(feature = "aws-kms")]
+assert_impl_all!(EnvelopeCipher<KMSKeyProvider>: Send, Sync);
+
+#[cfg(feature = "cache")]
 assert_impl_all!(EnvelopeCipher<CachingKeyWrapper<SimpleKeyProvider>>: Send, Sync);
+
+#[cfg(feature = "cache")]
 assert_impl_all!(EnvelopeCipher<CachingKeyWrapper<KMSKeyProvider>>: Send, Sync);
 
 #[cfg(test)]

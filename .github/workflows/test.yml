@@ -40,6 +40,10 @@ jobs:
         run: |
           cargo test
 
+      - name: "Check no default"
+        run : |
+          cargo check --no-default-features
+
   bench:
     runs-on: ubuntu-latest
     name: "⏱ Benchmark"
