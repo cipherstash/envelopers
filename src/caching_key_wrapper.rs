@@ -1,8 +1,8 @@
 use aes_gcm::aes::cipher::consts::U16;
 use aes_gcm::Key;
+use async_mutex::Mutex as AsyncMutex;
 use async_trait::async_trait;
 use lru::LruCache;
-use std::cell::RefCell;
 use std::time::{Duration, Instant};
 use zeroize::ZeroizeOnDrop;
 
@@ -79,8 +79,8 @@ impl Default for CacheOptions {
 /// - max bytes encrypted per key
 /// - max time key can be cached for
 pub struct CachingKeyWrapper<K> {
-    encryption_cache: RefCell<Vec<CachedEncryptionEntry>>,
-    decryption_cache: RefCell<LruCache<Vec<u8>, CachedDecryptionEntry>>,
+    encryption_cache: AsyncMutex<Vec<CachedEncryptionEntry>>,
+    decryption_cache: AsyncMutex<LruCache<Vec<u8>, CachedDecryptionEntry>>,
     options: CacheOptions,
     provider: K,
 }
@@ -90,8 +90,8 @@ impl<K> CachingKeyWrapper<K> {
     pub fn new(provider: K, options: CacheOptions) -> Self {
         Self {
             provider,
-            decryption_cache: RefCell::new(LruCache::new(options.max_entries)),
-            encryption_cache: Default::default(),
+            decryption_cache: AsyncMutex::new(LruCache::new(options.max_entries)),
+            encryption_cache: AsyncMutex::new(vec![]),
             options,
         }
     }
@@ -118,14 +118,8 @@ impl<K> CachingKeyWrapper<K> {
         }
     }
 
-    fn get_and_increment_cached_encryption_key(
-        &self,
-        bytes: usize,
-    ) -> Result<Option<DataKey>, KeyGenerationError> {
-        let mut cached = self
-            .encryption_cache
-            .try_borrow_mut()
-            .map_err(|_| KeyGenerationError::Other("Failed to borrow cached key".into()))?;
+    async fn get_and_increment_cached_encryption_key(&self, bytes: usize) -> Option<DataKey> {
+        let mut cached = self.encryption_cache.lock().await;
 
         while let Some(mut cached_entry) = cached.pop() {
             cached_entry.messages_encrypted += 1;
@@ -140,40 +134,32 @@ impl<K> CachingKeyWrapper<K> {
                 // Since the entry is fine to keep, add it back to the stack
                 cached.push(cached_entry);
 
-                return Ok(Some(key));
+                return Some(key);
             }
         }
 
-        Ok(None)
+        None
     }
 
-    fn get_cached_decryption_key(
-        &self,
-        encrypted_key: &Vec<u8>,
-    ) -> Result<Option<Key<U16>>, KeyDecryptionError> {
-        let mut decryption_cache = self
-            .decryption_cache
-            .try_borrow_mut()
-            .map_err(|_| KeyDecryptionError::Other("Failed to borrow decryption cache".into()))?;
+    async fn get_cached_decryption_key(&self, encrypted_key: &Vec<u8>) -> Option<Key<U16>> {
+        let mut decryption_cache = self.decryption_cache.lock().await;
 
         if let Some(cached_key) = decryption_cache.get(encrypted_key) {
             // Only return the cached key if the age is less than the max_age param.
             // I don't think this is strictly necessary, but it's what the JS AWS SDK does.
             if cached_key.created_at.elapsed() <= self.options.max_age {
-                return Ok(Some(cached_key.key));
+                return Some(cached_key.key);
             }
         }
 
         self.maybe_prune_last_decryption_entry(&mut decryption_cache);
 
-        Ok(None)
+        None
     }
 
-    fn cache_encryption_key(&self, bytes: usize, key: DataKey) -> Result<(), KeyGenerationError> {
-        let mut cached = self
-            .encryption_cache
-            .try_borrow_mut()
-            .map_err(|_| KeyGenerationError::Other("Failed to borrow cached key".into()))?;
+    async fn cache_encryption_key(&self, bytes: usize, key: DataKey) {
+        let mut cached = self.encryption_cache.lock().await;
+        let mut decryption_cache = self.decryption_cache.lock().await;
 
         // If the encryption cache has too many entries, remove the first one.
         // This operation needs to shift all the elements in the Vec, but should
@@ -190,11 +176,6 @@ impl<K> CachingKeyWrapper<K> {
             created_at: Instant::now(),
         });
 
-        let mut decryption_cache = self
-            .decryption_cache
-            .try_borrow_mut()
-            .map_err(|_| KeyGenerationError::Other("Failed to borrow decryption cache".into()))?;
-
         self.maybe_prune_last_decryption_entry(&mut decryption_cache);
 
         decryption_cache.put(
@@ -204,42 +185,33 @@ impl<K> CachingKeyWrapper<K> {
                 created_at: Instant::now(),
             },
         );
-
-        Ok(())
     }
 
-    fn cache_decryption_key(
-        &self,
-        encrypted_key: &Vec<u8>,
-        plaintext_key: Key<U16>,
-    ) -> Result<(), KeyDecryptionError> {
-        self.decryption_cache
-            .try_borrow_mut()
-            .map_err(|_| KeyDecryptionError::Other("Failed to borrow decryption cache".into()))?
-            .put(
-                // Sucks that you have to clone here - surely they can hash from a reference
-                encrypted_key.clone(),
-                CachedDecryptionEntry {
-                    key: plaintext_key,
-                    created_at: Instant::now(),
-                },
-            );
-
-        Ok(())
+    async fn cache_decryption_key(&self, encrypted_key: &Vec<u8>, plaintext_key: Key<U16>) {
+        self.decryption_cache.lock().await.put(
+            // Sucks that you have to clone here - surely they can hash from a reference
+            encrypted_key.clone(),
+            CachedDecryptionEntry {
+                key: plaintext_key,
+                created_at: Instant::now(),
+            },
+        );
     }
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl<K> KeyProvider for CachingKeyWrapper<K>
-where K: KeyProvider {
+where
+    K: KeyProvider,
+{
     async fn generate_data_key(&self, bytes: usize) -> Result<DataKey, KeyGenerationError> {
-        if let Some(cached_key) = self.get_and_increment_cached_encryption_key(bytes)? {
+        if let Some(cached_key) = self.get_and_increment_cached_encryption_key(bytes).await {
             return Ok(cached_key);
         }
 
         let key = self.provider.generate_data_key(bytes).await?;
 
-        self.cache_encryption_key(bytes, key.clone())?;
+        self.cache_encryption_key(bytes, key.clone()).await;
 
         Ok(key)
     }
@@ -248,13 +220,14 @@ where K: KeyProvider {
         &self,
         encrypted_key: &Vec<u8>,
     ) -> Result<Key<U16>, KeyDecryptionError> {
-        if let Some(cached_key) = self.get_cached_decryption_key(encrypted_key)? {
+        if let Some(cached_key) = self.get_cached_decryption_key(encrypted_key).await {
             return Ok(cached_key);
         }
 
         let plaintext_key = self.provider.decrypt_data_key(encrypted_key).await?;
 
-        self.cache_decryption_key(encrypted_key, plaintext_key)?;
+        self.cache_decryption_key(encrypted_key, plaintext_key)
+            .await;
 
         Ok(plaintext_key)
     }
@@ -317,7 +290,7 @@ mod tests {
         }
     }
 
-    #[async_trait(?Send)]
+    #[async_trait]
     impl KeyProvider for TestKeyProvider {
         async fn decrypt_data_key(
             &self,
@@ -327,7 +300,10 @@ mod tests {
             Ok(Key::clone_from_slice(&test_decrypt_bytes(encrypted_key)))
         }
 
-        async fn generate_data_key(&self, _bytes_to_encrypt: usize) -> Result<DataKey, KeyGenerationError> {
+        async fn generate_data_key(
+            &self,
+            _bytes_to_encrypt: usize,
+        ) -> Result<DataKey, KeyGenerationError> {
             let count = self.generate_counter.fetch_add(1, Ordering::Relaxed);
             // Generate a data key that is just the current count for all bytes
             let key = Key::clone_from_slice(&[count; 16]);
