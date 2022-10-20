@@ -1,9 +1,8 @@
 //! Trait for a KeyProvider
 
-
 use aes_gcm::aes::cipher::consts::U16;
 
-use aes_gcm::{Key};
+use aes_gcm::Key;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
@@ -14,29 +13,29 @@ use base64::{decode_config, encode_config};
 #[derive(Deserialize)]
 struct ViturDataKeyPair {
     dk: String,
-    wdk: String
+    wdk: String,
 }
 
 #[derive(Serialize)]
 struct DataKeyRequest {
-    tag: String
+    tag: String,
 }
 
 #[derive(Serialize)]
 pub struct DecryptRequest {
     wdk: String,
-    context: Option<String>
+    context: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct ViturDataKey {
-    dk: String
+    dk: String,
 }
 
 #[derive(Debug)]
 pub struct ViturKeyProvider {
     host: String,
-    key_id: String
+    key_id: String,
 }
 
 impl ViturKeyProvider {
@@ -45,25 +44,26 @@ impl ViturKeyProvider {
     }
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl KeyProvider for ViturKeyProvider {
     async fn decrypt_data_key(
         &self,
         encrypted_key: &Vec<u8>,
-        context: Option<String>
+        context: Option<String>,
     ) -> Result<Key<U16>, KeyDecryptionError> {
-
         let client = reqwest::Client::new();
 
         let vdk = DecryptRequest {
             wdk: encode_config(&encrypted_key, base64::URL_SAFE_NO_PAD),
-            context
+            context,
         };
 
-        let res = client.post(format!("{}/api/keys/{}/decrypt", self.host, self.key_id))
+        let res = client
+            .post(format!("{}/api/keys/{}/decrypt", self.host, self.key_id))
             .json(&vdk)
             .send()
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let dk: ViturDataKey = res.json().await.unwrap();
         let decoded = decode_config(&dk.dk, base64::URL_SAFE_NO_PAD).unwrap();
@@ -71,19 +71,28 @@ impl KeyProvider for ViturKeyProvider {
         return Ok(*Key::from_slice(&decoded));
     }
 
-    async fn generate_data_key(&self, _bytes: usize, tag: Option<String>) -> Result<DataKey, KeyGenerationError> {
+    async fn generate_data_key(
+        &self,
+        _bytes: usize,
+        tag: Option<String>,
+    ) -> Result<DataKey, KeyGenerationError> {
         let client = reqwest::Client::new();
         let data_key_request = DataKeyRequest {
-            tag: tag.ok_or("Tag must be provided").unwrap()
+            tag: tag.ok_or("Tag must be provided").unwrap(),
         };
-        let res = client.post(format!("{}/api/keys/{}/gen-data-key", self.host, self.key_id))
+        let res = client
+            .post(format!(
+                "{}/api/keys/{}/gen-data-key",
+                self.host, self.key_id
+            ))
             .json(&data_key_request)
             .send()
-            .await.unwrap();
+            .await
+            .unwrap();
 
         // TODO: We probably should use a fast binary format instead of JSON but 🤪
         let dkp: ViturDataKeyPair = res.json().await.unwrap();
-        
+
         return Ok(DataKey {
             key: *Key::from_slice(&decode_config(dkp.dk, base64::URL_SAFE_NO_PAD).unwrap()),
             encrypted_key: decode_config(dkp.wdk, base64::URL_SAFE_NO_PAD).unwrap(),
@@ -91,7 +100,3 @@ impl KeyProvider for ViturKeyProvider {
         });
     }
 }
-
-
-
-

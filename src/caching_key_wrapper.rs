@@ -209,12 +209,12 @@ where
         bytes: usize,
         tag: Option<String>,
     ) -> Result<DataKey, KeyGenerationError> {
-        if let Some(cached_key) = self.get_and_increment_cached_encryption_key(bytes)? {
+        if let Some(cached_key) = self.get_and_increment_cached_encryption_key(bytes).await {
             return Ok(cached_key);
         }
 
         let key = self.provider.generate_data_key(bytes, tag).await?;
-        self.cache_encryption_key(bytes, key.clone())?;
+        self.cache_encryption_key(bytes, key.clone()).await;
 
         Ok(key)
     }
