@@ -34,13 +34,18 @@ pub struct ViturDataKey {
 
 #[derive(Debug)]
 pub struct ViturKeyProvider {
+    access_token: String,
     host: String,
     key_id: String,
 }
 
 impl ViturKeyProvider {
-    pub fn new(host: String, key_id: String) -> Self {
-        Self { key_id, host }
+    pub fn new(host: String, key_id: String, access_token: String) -> Self {
+        Self {
+            access_token,
+            key_id,
+            host,
+        }
     }
 }
 
@@ -60,6 +65,7 @@ impl KeyProvider for ViturKeyProvider {
 
         let res = client
             .post(format!("{}/api/keys/{}/decrypt", self.host, self.key_id))
+            .header("authorization", format!("Bearer {}", &self.access_token))
             .json(&vdk)
             .send()
             .await
@@ -85,6 +91,7 @@ impl KeyProvider for ViturKeyProvider {
                 "{}/api/keys/{}/gen-data-key",
                 self.host, self.key_id
             ))
+            .header("authorization", format!("Bearer {}", &self.access_token))
             .json(&data_key_request)
             .send()
             .await
