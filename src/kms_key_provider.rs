@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use aws_sdk_kms::model::DataKeySpec;
 use aws_sdk_kms::types::Blob;

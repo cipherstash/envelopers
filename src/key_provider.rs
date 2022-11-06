@@ -1,7 +1,5 @@
 //! Trait for a KeyProvider
 
-use std::sync::Arc;
-
 use aes_gcm::aes::cipher::consts::U16;
 use aes_gcm::Key;
 use async_trait::async_trait;

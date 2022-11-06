@@ -46,7 +46,7 @@ impl ViturKeyProvider {
     }
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl KeyProvider for ViturKeyProvider {
     async fn decrypt_data_key(
         &self,

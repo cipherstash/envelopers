@@ -114,9 +114,7 @@ pub use aes_gcm::Key;
 
 use aes_gcm::aead::{Aead, NewAead, Payload};
 use aes_gcm::{Aes128Gcm, Nonce};
-use rand::rngs::ThreadRng;
 use async_mutex::Mutex as AsyncMutex;
-use rand::{RngCore, SeedableRng, thread_rng};
 use rand_chacha::ChaChaRng;
 use safe_rng::SafeRng;
 use serde::{Deserialize, Serialize};
