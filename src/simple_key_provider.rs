@@ -59,7 +59,7 @@ impl<'a> EncryptedSimpleKey<'a> {
     }
 
     /// Encode an [`EncryptedSimpleKey`] as bytes
-    fn to_vec(self) -> Vec<u8> {
+    fn to_vec(&self) -> Vec<u8> {
         let mut output = Vec::with_capacity(1 + self.nonce.len() + self.key.len());
         output.push(self.version);
         output.extend_from_slice(self.nonce);
@@ -85,10 +85,7 @@ impl<R: SafeRng> SimpleKeyProvider<R> {
 
 #[async_trait]
 impl<R: SafeRng> KeyProvider for SimpleKeyProvider<R> {
-    async fn decrypt_data_key(
-        &self,
-        encrypted_key: &Vec<u8>,
-    ) -> Result<Key<U16>, KeyDecryptionError> {
+    async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<U16>, KeyDecryptionError> {
         let key = Key::from_slice(&self.kek);
         let cipher = AesGcm::<Aes128, U16>::new(key);
 
