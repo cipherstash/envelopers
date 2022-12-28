@@ -217,8 +217,8 @@ assert_impl_all!(EnvelopeCipher<KMSKeyProvider<U16>>: Send, Sync);
 assert_impl_all!(EnvelopeCipher<KMSKeyProvider<U32>>: Send, Sync);
 
 #[cfg(feature = "cache")]
-assert_impl_all!(EnvelopeCipher<CachingKeyWrapper<SimpleKeyProvider<[u8; 16]>>>: Send, Sync);
-assert_impl_all!(EnvelopeCipher<CachingKeyWrapper<SimpleKeyProvider<[u8; 32]>, U32>>: Send, Sync);
+assert_impl_all!(EnvelopeCipher<CachingKeyWrapper<SimpleKeyProvider<U16>>>: Send, Sync);
+assert_impl_all!(EnvelopeCipher<CachingKeyWrapper<SimpleKeyProvider<U32>, U32>>: Send, Sync);
 
 #[cfg(feature = "cache")]
 assert_impl_all!(EnvelopeCipher<CachingKeyWrapper<KMSKeyProvider<U16>>>: Send, Sync);

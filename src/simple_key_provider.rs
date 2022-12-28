@@ -1,5 +1,6 @@
 //! Trait for a KeyProvider
 
+use aes_gcm::aead::generic_array::ArrayLength;
 use aes_gcm::aead::{Aead, NewAead, Payload};
 use aes_gcm::aes::cipher::consts::{U16, U32};
 use aes_gcm::aes::{Aes128, Aes256};
@@ -69,37 +70,37 @@ impl<'a> EncryptedSimpleKey<'a> {
 }
 
 #[derive(Debug)]
-pub struct SimpleKeyProvider<K, R: SafeRng = ChaChaRng> {
-    kek: K,
+pub struct SimpleKeyProvider<S: ArrayLength<u8>, R: SafeRng = ChaChaRng> {
+    key: Key<S>,
     rng: Mutex<R>,
 }
 
-impl<R: SafeRng> SimpleKeyProvider<[u8; 16], R> {
+impl<R: SafeRng> SimpleKeyProvider<U16, R> {
     pub fn init(kek: [u8; 16]) -> Self {
         Self::init_16(kek)
     }
 
     pub fn init_16(kek: [u8; 16]) -> Self {
         Self {
-            kek,
+            key: Key::from_slice(&kek).to_owned(),
             rng: Mutex::new(R::from_entropy()),
         }
     }
 }
 
-impl<R: SafeRng> SimpleKeyProvider<[u8; 32], R> {
+impl<S: ArrayLength<u8>, R: SafeRng> SimpleKeyProvider<S, R> {
     pub fn init_32(kek: [u8; 32]) -> Self {
         Self {
-            kek,
+            key: Key::from_slice(&kek).to_owned(),
             rng: Mutex::new(R::from_entropy()),
         }
     }
 }
 
 #[async_trait]
-impl<R: SafeRng> KeyProvider<U16> for SimpleKeyProvider<[u8; 16], R> {
+impl<R: SafeRng> KeyProvider<U16> for SimpleKeyProvider<U16, R> {
     async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<U16>, KeyDecryptionError> {
-        let key = Key::from_slice(&self.kek);
+        let key = &self.key;
         let cipher = AesGcm::<Aes128, U16>::new(key);
 
         let decoded_key = EncryptedSimpleKey::from_slice(encrypted_key)?;
@@ -116,7 +117,7 @@ impl<R: SafeRng> KeyProvider<U16> for SimpleKeyProvider<[u8; 16], R> {
     }
 
     async fn generate_data_key(&self, _bytes: usize) -> Result<DataKey<U16>, KeyGenerationError> {
-        let key = Key::from_slice(&self.kek);
+        let key = &self.key;
         let cipher = AesGcm::<Aes128, U16>::new(key);
 
         let version = 1;
@@ -151,9 +152,9 @@ impl<R: SafeRng> KeyProvider<U16> for SimpleKeyProvider<[u8; 16], R> {
 }
 
 #[async_trait]
-impl<R: SafeRng> KeyProvider<U32> for SimpleKeyProvider<[u8; 32], R> {
+impl<R: SafeRng> KeyProvider<U32> for SimpleKeyProvider<U32, R> {
     async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<U32>, KeyDecryptionError> {
-        let key = Key::from_slice(&self.kek);
+        let key = &self.key;
         let cipher = AesGcm::<Aes256, U16>::new(key);
 
         let decoded_key = EncryptedSimpleKey::from_slice(encrypted_key)?;
@@ -170,7 +171,7 @@ impl<R: SafeRng> KeyProvider<U32> for SimpleKeyProvider<[u8; 32], R> {
     }
 
     async fn generate_data_key(&self, _bytes: usize) -> Result<DataKey<U32>, KeyGenerationError> {
-        let key = Key::from_slice(&self.kek);
+        let key = &self.key;
         let cipher = AesGcm::<Aes256, U16>::new(key);
 
         let version = 1;
@@ -207,14 +208,16 @@ impl<R: SafeRng> KeyProvider<U32> for SimpleKeyProvider<[u8; 32], R> {
 #[cfg(test)]
 mod tests {
 
+    use aes_gcm::aes::cipher::consts::{U16, U32};
+
     use super::{EncryptedSimpleKey, Nonce};
     use crate::{key_provider::DataKey, KeyProvider, SimpleKeyProvider};
 
-    fn create_provider() -> SimpleKeyProvider<[u8; 16]> {
+    fn create_provider() -> SimpleKeyProvider<U16> {
         SimpleKeyProvider::init([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
     }
 
-    fn create_provider_u32() -> SimpleKeyProvider<[u8; 32]> {
+    fn create_provider_u32() -> SimpleKeyProvider<U32> {
         SimpleKeyProvider::init_32([
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
             11, 12, 13, 14, 15, 16,
