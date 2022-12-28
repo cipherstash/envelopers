@@ -1,5 +1,5 @@
 use aes_gcm::aead::generic_array::ArrayLength;
-use aes_gcm::aes::cipher::consts::{U16, U32};
+use aes_gcm::aes::cipher::consts::U16;
 use aes_gcm::Key;
 use async_mutex::Mutex as AsyncMutex;
 use async_trait::async_trait;
@@ -203,8 +203,8 @@ impl<K: KeyProvider<S>, S: ArrayLength<u8>> CachingKeyWrapper<K, S> {
 }
 
 #[async_trait]
-impl<K: KeyProvider<U16>> KeyProvider<U16> for CachingKeyWrapper<K, U16> {
-    async fn generate_data_key(&self, bytes: usize) -> Result<DataKey<U16>, KeyGenerationError> {
+impl<S: ArrayLength<u8>, K: KeyProvider<S>> KeyProvider<S> for CachingKeyWrapper<K, S> {
+    async fn generate_data_key(&self, bytes: usize) -> Result<DataKey<S>, KeyGenerationError> {
         if let Some(cached_key) = self.get_and_increment_cached_encryption_key(bytes).await {
             return Ok(cached_key);
         }
@@ -216,42 +216,14 @@ impl<K: KeyProvider<U16>> KeyProvider<U16> for CachingKeyWrapper<K, U16> {
         Ok(key)
     }
 
-    async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<U16>, KeyDecryptionError> {
+    async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<S>, KeyDecryptionError> {
         if let Some(cached_key) = self.get_cached_decryption_key(encrypted_key).await {
             return Ok(cached_key);
         }
 
         let plaintext_key = self.provider.decrypt_data_key(encrypted_key).await?;
 
-        self.cache_decryption_key(encrypted_key, plaintext_key)
-            .await;
-
-        Ok(plaintext_key)
-    }
-}
-
-#[async_trait]
-impl<K: KeyProvider<U32>> KeyProvider<U32> for CachingKeyWrapper<K, U32> {
-    async fn generate_data_key(&self, bytes: usize) -> Result<DataKey<U32>, KeyGenerationError> {
-        if let Some(cached_key) = self.get_and_increment_cached_encryption_key(bytes).await {
-            return Ok(cached_key);
-        }
-
-        let key = self.provider.generate_data_key(bytes).await?;
-
-        self.cache_encryption_key(bytes, key.clone()).await;
-
-        Ok(key)
-    }
-
-    async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<U32>, KeyDecryptionError> {
-        if let Some(cached_key) = self.get_cached_decryption_key(encrypted_key).await {
-            return Ok(cached_key);
-        }
-
-        let plaintext_key = self.provider.decrypt_data_key(encrypted_key).await?;
-
-        self.cache_decryption_key(encrypted_key, plaintext_key)
+        self.cache_decryption_key(encrypted_key, plaintext_key.clone())
             .await;
 
         Ok(plaintext_key)
