@@ -1,7 +1,7 @@
 //! Trait for a KeyProvider
 
+use aes_gcm::aes::cipher::{consts::U16, generic_array::ArrayLength};
 use aes_gcm::Key;
-use aes_gcm::{aead::generic_array::ArrayLength, aes::cipher::consts::U16};
 use async_trait::async_trait;
 use zeroize::Zeroize;
 

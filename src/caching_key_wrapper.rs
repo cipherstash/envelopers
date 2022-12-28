@@ -1,4 +1,5 @@
-use aes_gcm::aes::cipher::consts::U16;
+use aes_gcm::aead::generic_array::ArrayLength;
+use aes_gcm::aes::cipher::consts::{U16, U32};
 use aes_gcm::Key;
 use async_mutex::Mutex as AsyncMutex;
 use async_trait::async_trait;
@@ -11,17 +12,19 @@ use crate::key_provider::DataKey;
 use crate::KeyProvider;
 
 #[derive(ZeroizeOnDrop)]
-struct CachedEncryptionEntry {
+struct CachedEncryptionEntry<S: ArrayLength<u8>> {
     #[zeroize(skip)]
     created_at: Instant,
-    key: DataKey,
+    #[zeroize(skip)]
+    key: DataKey<S>,
     bytes_encrypted: usize,
     messages_encrypted: usize,
 }
 
 #[derive(ZeroizeOnDrop)]
-struct CachedDecryptionEntry {
-    key: Key<U16>,
+struct CachedDecryptionEntry<S: ArrayLength<u8>> {
+    #[zeroize(skip)]
+    key: Key<S>,
     #[zeroize(skip)]
     created_at: Instant,
 }
@@ -78,14 +81,14 @@ impl Default for CacheOptions {
 /// - max messages encrypted per key
 /// - max bytes encrypted per key
 /// - max time key can be cached for
-pub struct CachingKeyWrapper<K> {
-    encryption_cache: AsyncMutex<Vec<CachedEncryptionEntry>>,
-    decryption_cache: AsyncMutex<LruCache<Vec<u8>, CachedDecryptionEntry>>,
+pub struct CachingKeyWrapper<K: KeyProvider<S>, S: ArrayLength<u8> = U16> {
+    encryption_cache: AsyncMutex<Vec<CachedEncryptionEntry<S>>>,
+    decryption_cache: AsyncMutex<LruCache<Vec<u8>, CachedDecryptionEntry<S>>>,
     options: CacheOptions,
     provider: K,
 }
 
-impl<K> CachingKeyWrapper<K> {
+impl<K: KeyProvider<S>, S: ArrayLength<u8>> CachingKeyWrapper<K, S> {
     /// Create a new CachingKeyWrapper from a certain key provider and caching options
     pub fn new(provider: K, options: CacheOptions) -> Self {
         Self {
@@ -96,7 +99,7 @@ impl<K> CachingKeyWrapper<K> {
         }
     }
 
-    fn has_exceeded_limits(&self, entry: &CachedEncryptionEntry) -> bool {
+    fn has_exceeded_limits(&self, entry: &CachedEncryptionEntry<S>) -> bool {
         entry.created_at.elapsed() > self.options.max_age
             || entry.messages_encrypted > self.options.max_messages
             || entry.bytes_encrypted > self.options.max_bytes
@@ -104,7 +107,7 @@ impl<K> CachingKeyWrapper<K> {
 
     fn maybe_prune_last_decryption_entry(
         &self,
-        cache: &mut LruCache<Vec<u8>, CachedDecryptionEntry>,
+        cache: &mut LruCache<Vec<u8>, CachedDecryptionEntry<S>>,
     ) {
         let should_pop = cache
             .peek_lru()
@@ -118,7 +121,7 @@ impl<K> CachingKeyWrapper<K> {
         }
     }
 
-    async fn get_and_increment_cached_encryption_key(&self, bytes: usize) -> Option<DataKey> {
+    async fn get_and_increment_cached_encryption_key(&self, bytes: usize) -> Option<DataKey<S>> {
         let mut cached = self.encryption_cache.lock().await;
 
         while let Some(mut cached_entry) = cached.pop() {
@@ -141,14 +144,14 @@ impl<K> CachingKeyWrapper<K> {
         None
     }
 
-    async fn get_cached_decryption_key(&self, encrypted_key: &[u8]) -> Option<Key<U16>> {
+    async fn get_cached_decryption_key(&self, encrypted_key: &[u8]) -> Option<Key<S>> {
         let mut decryption_cache = self.decryption_cache.lock().await;
 
         if let Some(cached_key) = decryption_cache.get(encrypted_key) {
             // Only return the cached key if the age is less than the max_age param.
             // I don't think this is strictly necessary, but it's what the JS AWS SDK does.
             if cached_key.created_at.elapsed() <= self.options.max_age {
-                return Some(cached_key.key);
+                return Some(cached_key.key.clone());
             }
         }
 
@@ -157,7 +160,7 @@ impl<K> CachingKeyWrapper<K> {
         None
     }
 
-    async fn cache_encryption_key(&self, bytes: usize, key: DataKey) {
+    async fn cache_encryption_key(&self, bytes: usize, key: DataKey<S>) {
         let mut cached = self.encryption_cache.lock().await;
         let mut decryption_cache = self.decryption_cache.lock().await;
 
@@ -187,7 +190,7 @@ impl<K> CachingKeyWrapper<K> {
         );
     }
 
-    async fn cache_decryption_key(&self, encrypted_key: &[u8], plaintext_key: Key<U16>) {
+    async fn cache_decryption_key(&self, encrypted_key: &[u8], plaintext_key: Key<S>) {
         self.decryption_cache.lock().await.put(
             // Sucks that you have to clone here - surely they can hash from a reference
             encrypted_key.to_vec(),
@@ -200,11 +203,8 @@ impl<K> CachingKeyWrapper<K> {
 }
 
 #[async_trait]
-impl<K> KeyProvider for CachingKeyWrapper<K>
-where
-    K: KeyProvider,
-{
-    async fn generate_data_key(&self, bytes: usize) -> Result<DataKey, KeyGenerationError> {
+impl<K: KeyProvider<U16>> KeyProvider<U16> for CachingKeyWrapper<K, U16> {
+    async fn generate_data_key(&self, bytes: usize) -> Result<DataKey<U16>, KeyGenerationError> {
         if let Some(cached_key) = self.get_and_increment_cached_encryption_key(bytes).await {
             return Ok(cached_key);
         }
@@ -217,6 +217,34 @@ where
     }
 
     async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<U16>, KeyDecryptionError> {
+        if let Some(cached_key) = self.get_cached_decryption_key(encrypted_key).await {
+            return Ok(cached_key);
+        }
+
+        let plaintext_key = self.provider.decrypt_data_key(encrypted_key).await?;
+
+        self.cache_decryption_key(encrypted_key, plaintext_key)
+            .await;
+
+        Ok(plaintext_key)
+    }
+}
+
+#[async_trait]
+impl<K: KeyProvider<U32>> KeyProvider<U32> for CachingKeyWrapper<K, U32> {
+    async fn generate_data_key(&self, bytes: usize) -> Result<DataKey<U32>, KeyGenerationError> {
+        if let Some(cached_key) = self.get_and_increment_cached_encryption_key(bytes).await {
+            return Ok(cached_key);
+        }
+
+        let key = self.provider.generate_data_key(bytes).await?;
+
+        self.cache_encryption_key(bytes, key.clone()).await;
+
+        Ok(key)
+    }
+
+    async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<U32>, KeyDecryptionError> {
         if let Some(cached_key) = self.get_cached_decryption_key(encrypted_key).await {
             return Ok(cached_key);
         }
@@ -300,7 +328,7 @@ mod tests {
         async fn generate_data_key(
             &self,
             _bytes_to_encrypt: usize,
-        ) -> Result<DataKey, KeyGenerationError> {
+        ) -> Result<DataKey<U16>, KeyGenerationError> {
             let count = self.generate_counter.fetch_add(1, Ordering::Relaxed);
             // Generate a data key that is just the current count for all bytes
             let key = Key::clone_from_slice(&[count; 16]);

@@ -74,8 +74,21 @@ pub struct SimpleKeyProvider<K, R: SafeRng = ChaChaRng> {
     rng: Mutex<R>,
 }
 
-impl<K, R: SafeRng> SimpleKeyProvider<K, R> {
-    pub fn init(kek: K) -> Self {
+impl<R: SafeRng> SimpleKeyProvider<[u8; 16], R> {
+    pub fn init(kek: [u8; 16]) -> Self {
+        Self::init_16(kek)
+    }
+
+    pub fn init_16(kek: [u8; 16]) -> Self {
+        Self {
+            kek,
+            rng: Mutex::new(R::from_entropy()),
+        }
+    }
+}
+
+impl<R: SafeRng> SimpleKeyProvider<[u8; 32], R> {
+    pub fn init_32(kek: [u8; 32]) -> Self {
         Self {
             kek,
             rng: Mutex::new(R::from_entropy()),
@@ -202,7 +215,7 @@ mod tests {
     }
 
     fn create_provider_u32() -> SimpleKeyProvider<[u8; 32]> {
-        SimpleKeyProvider::init([
+        SimpleKeyProvider::init_32([
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
             11, 12, 13, 14, 15, 16,
         ])
