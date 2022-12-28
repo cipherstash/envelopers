@@ -214,14 +214,17 @@ assert_impl_all!(EnvelopeCipher<Box<dyn KeyProvider<U32>>>: Send, Sync);
 
 #[cfg(feature = "aws-kms")]
 assert_impl_all!(EnvelopeCipher<KMSKeyProvider<U16>>: Send, Sync);
+#[cfg(feature = "aws-kms")]
 assert_impl_all!(EnvelopeCipher<KMSKeyProvider<U32>>: Send, Sync);
 
 #[cfg(feature = "cache")]
 assert_impl_all!(EnvelopeCipher<CachingKeyWrapper<SimpleKeyProvider<U16>>>: Send, Sync);
+#[cfg(feature = "cache")]
 assert_impl_all!(EnvelopeCipher<CachingKeyWrapper<SimpleKeyProvider<U32>, U32>>: Send, Sync);
 
-#[cfg(feature = "cache")]
+#[cfg(all(feature = "cache", feature = "aws-kms"))]
 assert_impl_all!(EnvelopeCipher<CachingKeyWrapper<KMSKeyProvider<U16>>>: Send, Sync);
+#[cfg(all(feature = "cache", feature = "aws-kms"))]
 assert_impl_all!(EnvelopeCipher<CachingKeyWrapper<KMSKeyProvider<U32>, U32>>: Send, Sync);
 
 #[cfg(test)]
