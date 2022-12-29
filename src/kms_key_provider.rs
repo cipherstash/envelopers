@@ -1,19 +1,20 @@
 use std::marker::PhantomData;
 
-use async_trait::async_trait;
-use aws_config::RetryConfig;
-use aws_sdk_kms::error::GenerateDataKeyError;
-use aws_sdk_kms::model::DataKeySpec;
-use aws_sdk_kms::output::GenerateDataKeyOutput;
-use aws_sdk_kms::types::Blob;
-use aws_sdk_kms::types::SdkError;
-use aws_sdk_kms::{Client, Config, Credentials, Region};
-
-use crate::errors::{KeyDecryptionError, KeyGenerationError};
-use crate::key_provider::{DataKey, KeyProvider};
 use aes_gcm::aes::cipher::consts::{U16, U32};
 use aes_gcm::aes::cipher::generic_array::ArrayLength;
 use aes_gcm::Key;
+use async_trait::async_trait;
+use aws_config::RetryConfig;
+use aws_sdk_kms::{
+    error::GenerateDataKeyError,
+    model::DataKeySpec,
+    output::GenerateDataKeyOutput,
+    types::{Blob, SdkError},
+    Client, Config, Credentials, Region,
+};
+
+use crate::errors::{KeyDecryptionError, KeyGenerationError};
+use crate::key_provider::{DataKey, KeyProvider};
 
 pub struct KMSKeyProvider<S: ArrayLength<u8> = U16> {
     key_id: String,

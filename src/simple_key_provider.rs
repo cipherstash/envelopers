@@ -1,8 +1,8 @@
 //! Trait for a KeyProvider
 
-use aes_gcm::aead::generic_array::ArrayLength;
 use aes_gcm::aead::{Aead, NewAead, Payload};
 use aes_gcm::aes::cipher::consts::{U16, U32};
+use aes_gcm::aes::cipher::generic_array::ArrayLength;
 use aes_gcm::aes::{Aes128, Aes256};
 use aes_gcm::{AesGcm, Key};
 use async_trait::async_trait;

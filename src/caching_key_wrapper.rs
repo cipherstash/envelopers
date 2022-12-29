@@ -1,10 +1,11 @@
-use aes_gcm::aead::generic_array::ArrayLength;
+use std::time::{Duration, Instant};
+
 use aes_gcm::aes::cipher::consts::U16;
+use aes_gcm::aes::cipher::generic_array::ArrayLength;
 use aes_gcm::Key;
 use async_mutex::Mutex as AsyncMutex;
 use async_trait::async_trait;
 use lru::LruCache;
-use std::time::{Duration, Instant};
 use zeroize::ZeroizeOnDrop;
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
