@@ -1,26 +1,32 @@
+use std::marker::PhantomData;
+
 use async_trait::async_trait;
-use aws_sdk_kms::model::DataKeySpec;
-use aws_sdk_kms::types::Blob;
-use aws_sdk_kms::{Client, Config, Credentials, Region};
 use aws_config::RetryConfig;
+use aws_sdk_kms::error::GenerateDataKeyError;
+use aws_sdk_kms::model::DataKeySpec;
+use aws_sdk_kms::output::GenerateDataKeyOutput;
+use aws_sdk_kms::types::Blob;
+use aws_sdk_kms::types::SdkError;
+use aws_sdk_kms::{Client, Config, Credentials, Region};
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
 use crate::key_provider::{DataKey, KeyProvider};
-use aes_gcm::aes::cipher::consts::U16;
+use aes_gcm::aes::cipher::consts::{U16, U32};
+use aes_gcm::aes::cipher::generic_array::ArrayLength;
 use aes_gcm::Key;
 
-pub struct KMSKeyProvider {
+pub struct KMSKeyProvider<S: ArrayLength<u8> = U16> {
     key_id: String,
-    data_key_spec: DataKeySpec,
     client: Client,
+    phantom: PhantomData<S>,
 }
 
-impl KMSKeyProvider {
+impl<S: ArrayLength<u8>> KMSKeyProvider<S> {
     pub fn new(client: Client, key_id: String) -> Self {
         Self {
             client,
-            data_key_spec: DataKeySpec::Aes128,
             key_id,
+            phantom: PhantomData,
         }
     }
 
@@ -52,26 +58,55 @@ impl KMSKeyProvider {
 
         Self::new(client, key_id.into())
     }
+}
 
-    pub fn with_spec(mut self, spec: DataKeySpec) -> Self {
-        self.data_key_spec = spec;
-        self
+#[async_trait]
+trait KMSCommon {
+    async fn aws_generate_data_key(
+        &self,
+    ) -> Result<GenerateDataKeyOutput, SdkError<GenerateDataKeyError>>;
+}
+
+#[async_trait]
+impl KMSCommon for KMSKeyProvider<U16> {
+    async fn aws_generate_data_key(
+        &self,
+    ) -> Result<GenerateDataKeyOutput, SdkError<GenerateDataKeyError>> {
+        self.client
+            .generate_data_key()
+            .key_id(&self.key_id)
+            .key_spec(DataKeySpec::Aes128)
+            .send()
+            .await
     }
 }
 
 #[async_trait]
-impl KeyProvider for KMSKeyProvider {
-    async fn generate_data_key(&self, _bytes_to_encrypt: usize) -> Result<DataKey, KeyGenerationError> {
-        let mut response = self
-            .client
+impl KMSCommon for KMSKeyProvider<U32> {
+    async fn aws_generate_data_key(
+        &self,
+    ) -> Result<GenerateDataKeyOutput, SdkError<GenerateDataKeyError>> {
+        self.client
             .generate_data_key()
             .key_id(&self.key_id)
-            .key_spec(self.data_key_spec.clone())
+            .key_spec(DataKeySpec::Aes256)
             .send()
             .await
-            .map_err(|e| {
-                KeyGenerationError::Other(format!("KMS generate data key request failed: {}", e))
-            })?;
+    }
+}
+
+#[async_trait]
+impl<S: ArrayLength<u8> + Send + Sync> KeyProvider<S> for KMSKeyProvider<S>
+where
+    KMSKeyProvider<S>: KMSCommon,
+{
+    async fn generate_data_key(
+        &self,
+        _bytes_to_encrypt: usize,
+    ) -> Result<DataKey<S>, KeyGenerationError> {
+        let mut response = self.aws_generate_data_key().await.map_err(|e| {
+            KeyGenerationError::Other(format!("KMS generate data key request failed: {}", e))
+        })?;
 
         let encrypted_key = response
             .ciphertext_blob
@@ -98,14 +133,11 @@ impl KeyProvider for KMSKeyProvider {
         })
     }
 
-    async fn decrypt_data_key(
-        &self,
-        encrypted_key: &Vec<u8>,
-    ) -> Result<Key<U16>, KeyDecryptionError> {
+    async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<S>, KeyDecryptionError> {
         let response = self
             .client
             .decrypt()
-            .ciphertext_blob(Blob::new(encrypted_key.clone()))
+            .ciphertext_blob(Blob::new(encrypted_key))
             .send()
             .await
             .map_err(|e| KeyDecryptionError::Other(e.to_string()))?;
@@ -121,6 +153,7 @@ impl KeyProvider for KMSKeyProvider {
 #[cfg(test)]
 mod tests {
 
+    use aes_gcm::aes::cipher::consts::U16;
     use aws_sdk_kms::{Client, Config, Credentials, Region};
     use aws_smithy_client::test_connection::TestConnection;
     use aws_smithy_http::body::SdkBody;
@@ -187,7 +220,7 @@ mod tests {
             ),
             200,
             |client| async move {
-                let provider = KMSKeyProvider::new(client, key_id.into());
+                let provider = KMSKeyProvider::<U16>::new(client, key_id.into());
 
                 let key = provider
                     .generate_data_key(0)
@@ -211,7 +244,7 @@ mod tests {
             "{}",
             200,
             |client| async move {
-                let provider = KMSKeyProvider::new(client, key_id.into());
+                let provider = KMSKeyProvider::<U16>::new(client, key_id.into());
 
                 let result = provider.generate_data_key(0).await;
 
@@ -240,7 +273,7 @@ mod tests {
             ),
             200,
             |client| async move {
-                let provider = KMSKeyProvider::new(client, key_id.into());
+                let provider = KMSKeyProvider::<U16>::new(client, key_id.into());
 
                 let result = provider.generate_data_key(0).await;
 
@@ -270,7 +303,7 @@ mod tests {
             ),
             200,
             |client| async move {
-                let provider = KMSKeyProvider::new(client, key_id.into());
+                let provider = KMSKeyProvider::<U16>::new(client, key_id.into());
 
                 let result = provider.generate_data_key(0).await;
 
@@ -294,7 +327,7 @@ mod tests {
             "{}",
             500,
             |client| async move {
-                let provider = KMSKeyProvider::new(client, key_id.into());
+                let provider = KMSKeyProvider::<U16>::new(client, key_id.into());
 
                 let result = provider.generate_data_key(0).await;
 

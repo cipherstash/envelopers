@@ -1,8 +1,9 @@
 //! Trait for a KeyProvider
 
+use aes_gcm::aead::generic_array::ArrayLength;
 use aes_gcm::aead::{Aead, NewAead, Payload};
-use aes_gcm::aes::cipher::consts::U16;
-use aes_gcm::aes::Aes128; // Or Aes256
+use aes_gcm::aes::cipher::consts::{U16, U32};
+use aes_gcm::aes::{Aes128, Aes256};
 use aes_gcm::{AesGcm, Key};
 use async_trait::async_trait;
 use rand_chacha::ChaChaRng;
@@ -59,7 +60,7 @@ impl<'a> EncryptedSimpleKey<'a> {
     }
 
     /// Encode an [`EncryptedSimpleKey`] as bytes
-    fn to_vec(self) -> Vec<u8> {
+    fn to_vec(&self) -> Vec<u8> {
         let mut output = Vec::with_capacity(1 + self.nonce.len() + self.key.len());
         output.push(self.version);
         output.extend_from_slice(self.nonce);
@@ -69,27 +70,37 @@ impl<'a> EncryptedSimpleKey<'a> {
 }
 
 #[derive(Debug)]
-pub struct SimpleKeyProvider<R: SafeRng = ChaChaRng> {
-    kek: [u8; 16],
+pub struct SimpleKeyProvider<S: ArrayLength<u8>, R: SafeRng = ChaChaRng> {
+    key: Key<S>,
     rng: Mutex<R>,
 }
 
-impl<R: SafeRng> SimpleKeyProvider<R> {
+impl<R: SafeRng> SimpleKeyProvider<U16, R> {
     pub fn init(kek: [u8; 16]) -> Self {
+        Self::init_16(kek)
+    }
+
+    pub fn init_16(kek: [u8; 16]) -> Self {
         Self {
-            kek,
+            key: Key::from_slice(&kek).to_owned(),
+            rng: Mutex::new(R::from_entropy()),
+        }
+    }
+}
+
+impl<S: ArrayLength<u8>, R: SafeRng> SimpleKeyProvider<S, R> {
+    pub fn init_32(kek: [u8; 32]) -> Self {
+        Self {
+            key: Key::from_slice(&kek).to_owned(),
             rng: Mutex::new(R::from_entropy()),
         }
     }
 }
 
 #[async_trait]
-impl<R: SafeRng> KeyProvider for SimpleKeyProvider<R> {
-    async fn decrypt_data_key(
-        &self,
-        encrypted_key: &Vec<u8>,
-    ) -> Result<Key<U16>, KeyDecryptionError> {
-        let key = Key::from_slice(&self.kek);
+impl<R: SafeRng> KeyProvider<U16> for SimpleKeyProvider<U16, R> {
+    async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<U16>, KeyDecryptionError> {
+        let key = &self.key;
         let cipher = AesGcm::<Aes128, U16>::new(key);
 
         let decoded_key = EncryptedSimpleKey::from_slice(encrypted_key)?;
@@ -105,8 +116,8 @@ impl<R: SafeRng> KeyProvider for SimpleKeyProvider<R> {
         return Ok(*Key::from_slice(&data_key));
     }
 
-    async fn generate_data_key(&self, _bytes: usize) -> Result<DataKey, KeyGenerationError> {
-        let key = Key::from_slice(&self.kek);
+    async fn generate_data_key(&self, _bytes: usize) -> Result<DataKey<U16>, KeyGenerationError> {
+        let key = &self.key;
         let cipher = AesGcm::<Aes128, U16>::new(key);
 
         let version = 1;
@@ -140,14 +151,77 @@ impl<R: SafeRng> KeyProvider for SimpleKeyProvider<R> {
     }
 }
 
+#[async_trait]
+impl<R: SafeRng> KeyProvider<U32> for SimpleKeyProvider<U32, R> {
+    async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<U32>, KeyDecryptionError> {
+        let key = &self.key;
+        let cipher = AesGcm::<Aes256, U16>::new(key);
+
+        let decoded_key = EncryptedSimpleKey::from_slice(encrypted_key)?;
+
+        let data_key = cipher.decrypt(
+            decoded_key.nonce,
+            Payload {
+                msg: decoded_key.key,
+                aad: &[decoded_key.version],
+            },
+        )?;
+
+        return Ok(*Key::from_slice(&data_key));
+    }
+
+    async fn generate_data_key(&self, _bytes: usize) -> Result<DataKey<U32>, KeyGenerationError> {
+        let key = &self.key;
+        let cipher = AesGcm::<Aes256, U16>::new(key);
+
+        let version = 1;
+        let mut data_key: Key<U32> = Default::default();
+        let mut nonce: Nonce = Default::default();
+
+        {
+            let mut rng = self.rng.lock().unwrap_or_else(|e| e.into_inner());
+            rng.try_fill_bytes(&mut data_key)?;
+            rng.try_fill_bytes(&mut nonce)?;
+        }
+
+        let payload = Payload {
+            msg: &data_key,
+            aad: &[version],
+        };
+
+        let ciphertext = cipher.encrypt(&nonce, payload)?;
+
+        let encrypted_key = EncryptedSimpleKey {
+            version,
+            key: &ciphertext,
+            nonce: &nonce,
+        };
+
+        return Ok(DataKey {
+            key: data_key,
+            encrypted_key: encrypted_key.to_vec(),
+            key_id: String::from("simplekey"),
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
+
+    use aes_gcm::aes::cipher::consts::{U16, U32};
 
     use super::{EncryptedSimpleKey, Nonce};
     use crate::{key_provider::DataKey, KeyProvider, SimpleKeyProvider};
 
-    fn create_provider() -> SimpleKeyProvider {
+    fn create_provider() -> SimpleKeyProvider<U16> {
         SimpleKeyProvider::init([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+    }
+
+    fn create_provider_u32() -> SimpleKeyProvider<U32> {
+        SimpleKeyProvider::init_32([
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+            11, 12, 13, 14, 15, 16,
+        ])
     }
 
     #[tokio::test]
@@ -165,8 +239,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_generate_decrypt_data_key_u32() {
+        let provider = create_provider_u32();
+
+        let DataKey {
+            encrypted_key, key, ..
+        } = provider.generate_data_key(0).await.unwrap();
+
+        assert_eq!(
+            key,
+            provider.decrypt_data_key(&encrypted_key).await.unwrap()
+        );
+    }
+
+    #[tokio::test]
     async fn test_generate_decrypt_data_key_boxed() {
-        let provider: Box<dyn KeyProvider> = Box::new(create_provider());
+        let provider: Box<dyn KeyProvider<_>> = Box::new(create_provider());
+
+        let DataKey {
+            encrypted_key, key, ..
+        } = provider.generate_data_key(0).await.unwrap();
+
+        assert_eq!(
+            key,
+            provider.decrypt_data_key(&encrypted_key).await.unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_generate_decrypt_data_key_boxed_u32() {
+        let provider: Box<dyn KeyProvider<_>> = Box::new(create_provider_u32());
 
         let DataKey {
             encrypted_key, key, ..
@@ -180,9 +282,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_fails_on_invalid_data_key() {
-        let first: SimpleKeyProvider = SimpleKeyProvider::init([0; 16]);
-
-        let second: SimpleKeyProvider = SimpleKeyProvider::init([1; 16]);
+        let first: SimpleKeyProvider<_> = SimpleKeyProvider::init([0; 16]);
+        let second: SimpleKeyProvider<_> = SimpleKeyProvider::init([1; 16]);
 
         let DataKey { encrypted_key, .. } = first.generate_data_key(0).await.unwrap();
 
@@ -198,7 +299,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fails_on_invalid_nonce() {
-        let provider: SimpleKeyProvider = SimpleKeyProvider::init([0; 16]);
+        let provider: SimpleKeyProvider<_> = SimpleKeyProvider::init([0; 16]);
 
         let DataKey {
             mut encrypted_key, ..
@@ -223,7 +324,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fails_on_invalid_version() {
-        let provider: SimpleKeyProvider = SimpleKeyProvider::init([0; 16]);
+        let provider: SimpleKeyProvider<_> = SimpleKeyProvider::init([0; 16]);
 
         let DataKey {
             mut encrypted_key, ..
