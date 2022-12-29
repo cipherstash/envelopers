@@ -75,23 +75,10 @@ pub struct SimpleKeyProvider<S: ArrayLength<u8>, R: SafeRng = ChaChaRng> {
     rng: Mutex<R>,
 }
 
-impl<R: SafeRng> SimpleKeyProvider<U16, R> {
-    pub fn init(kek: [u8; 16]) -> Self {
-        Self::init_16(kek)
-    }
-
-    pub fn init_16(kek: [u8; 16]) -> Self {
-        Self {
-            key: Key::from_slice(&kek).to_owned(),
-            rng: Mutex::new(R::from_entropy()),
-        }
-    }
-}
-
 impl<S: ArrayLength<u8>, R: SafeRng> SimpleKeyProvider<S, R> {
-    pub fn init_32(kek: [u8; 32]) -> Self {
+    pub fn init(kek: &[u8]) -> Self {
         Self {
-            key: Key::from_slice(&kek).to_owned(),
+            key: Key::from_slice(kek).to_owned(),
             rng: Mutex::new(R::from_entropy()),
         }
     }
@@ -214,11 +201,11 @@ mod tests {
     use crate::{key_provider::DataKey, KeyProvider, SimpleKeyProvider};
 
     fn create_provider() -> SimpleKeyProvider<U16> {
-        SimpleKeyProvider::init([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+        SimpleKeyProvider::init(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
     }
 
     fn create_provider_u32() -> SimpleKeyProvider<U32> {
-        SimpleKeyProvider::init_32([
+        SimpleKeyProvider::init(&[
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
             11, 12, 13, 14, 15, 16,
         ])
@@ -282,8 +269,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_fails_on_invalid_data_key() {
-        let first: SimpleKeyProvider<_> = SimpleKeyProvider::init([0; 16]);
-        let second: SimpleKeyProvider<_> = SimpleKeyProvider::init([1; 16]);
+        let first: SimpleKeyProvider<U16> = SimpleKeyProvider::init(&[0; 16]);
+        let second: SimpleKeyProvider<U16> = SimpleKeyProvider::init(&[1; 16]);
 
         let DataKey { encrypted_key, .. } = first.generate_data_key(0).await.unwrap();
 
@@ -299,7 +286,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fails_on_invalid_nonce() {
-        let provider: SimpleKeyProvider<_> = SimpleKeyProvider::init([0; 16]);
+        let provider: SimpleKeyProvider<U16> = SimpleKeyProvider::init(&[0; 16]);
 
         let DataKey {
             mut encrypted_key, ..
@@ -324,7 +311,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fails_on_invalid_version() {
-        let provider: SimpleKeyProvider<_> = SimpleKeyProvider::init([0; 16]);
+        let provider: SimpleKeyProvider<U16> = SimpleKeyProvider::init(&[0; 16]);
 
         let DataKey {
             mut encrypted_key, ..

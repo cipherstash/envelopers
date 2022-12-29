@@ -233,7 +233,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_encrypt_decrypt() {
-        let provider: SimpleKeyProvider<_> = SimpleKeyProvider::init([1; 16]);
+        let provider: SimpleKeyProvider<_> = SimpleKeyProvider::init(&[1; 16]);
         let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
 
         let message = "hello".as_bytes();
@@ -246,7 +246,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_encrypt_decrypt_boxed() {
-        let provider: SimpleKeyProvider<_> = SimpleKeyProvider::init([1; 16]);
+        let provider: SimpleKeyProvider<_> = SimpleKeyProvider::init(&[1; 16]);
         let cipher: EnvelopeCipher<Box<dyn KeyProvider<_>>> =
             EnvelopeCipher::init(Box::new(provider));
 
@@ -261,7 +261,7 @@ mod tests {
     #[tokio::test]
     async fn test_encrypt_decrypt_cache() {
         let provider: CachingKeyWrapper<SimpleKeyProvider<_>> =
-            CachingKeyWrapper::new(SimpleKeyProvider::init([1; 16]), CacheOptions::default());
+            CachingKeyWrapper::new(SimpleKeyProvider::init(&[1; 16]), CacheOptions::default());
 
         let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
 
