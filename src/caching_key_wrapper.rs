@@ -141,7 +141,7 @@ impl<K> CachingKeyWrapper<K> {
         None
     }
 
-    async fn get_cached_decryption_key(&self, encrypted_key: &Vec<u8>) -> Option<Key<U16>> {
+    async fn get_cached_decryption_key(&self, encrypted_key: &[u8]) -> Option<Key<U16>> {
         let mut decryption_cache = self.decryption_cache.lock().await;
 
         if let Some(cached_key) = decryption_cache.get(encrypted_key) {
@@ -187,10 +187,10 @@ impl<K> CachingKeyWrapper<K> {
         );
     }
 
-    async fn cache_decryption_key(&self, encrypted_key: &Vec<u8>, plaintext_key: Key<U16>) {
+    async fn cache_decryption_key(&self, encrypted_key: &[u8], plaintext_key: Key<U16>) {
         self.decryption_cache.lock().await.put(
             // Sucks that you have to clone here - surely they can hash from a reference
-            encrypted_key.clone(),
+            encrypted_key.to_vec(),
             CachedDecryptionEntry {
                 key: plaintext_key,
                 created_at: Instant::now(),
@@ -216,10 +216,7 @@ where
         Ok(key)
     }
 
-    async fn decrypt_data_key(
-        &self,
-        encrypted_key: &Vec<u8>,
-    ) -> Result<Key<U16>, KeyDecryptionError> {
+    async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<U16>, KeyDecryptionError> {
         if let Some(cached_key) = self.get_cached_decryption_key(encrypted_key).await {
             return Ok(cached_key);
         }
@@ -294,7 +291,7 @@ mod tests {
     impl KeyProvider for TestKeyProvider {
         async fn decrypt_data_key(
             &self,
-            encrypted_key: &Vec<u8>,
+            encrypted_key: &[u8],
         ) -> Result<Key<U16>, KeyDecryptionError> {
             self.decrypt_counter.fetch_add(1, Ordering::Relaxed);
             Ok(Key::clone_from_slice(&test_decrypt_bytes(encrypted_key)))

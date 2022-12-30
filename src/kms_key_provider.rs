@@ -101,14 +101,11 @@ impl KeyProvider for KMSKeyProvider {
         })
     }
 
-    async fn decrypt_data_key(
-        &self,
-        encrypted_key: &Vec<u8>,
-    ) -> Result<Key<U16>, KeyDecryptionError> {
+    async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<U16>, KeyDecryptionError> {
         let response = self
             .client
             .decrypt()
-            .ciphertext_blob(Blob::new(encrypted_key.clone()))
+            .ciphertext_blob(Blob::new(encrypted_key.to_vec()))
             .send()
             .await
             .map_err(|e| KeyDecryptionError::Other(e.to_string()))?;
