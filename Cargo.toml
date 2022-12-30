@@ -38,14 +38,15 @@ async-mutex = "1.4.0"
 
 [features]
 default = ["aws-kms", "cache"]
+# default = ["aws-kms"]
 aws-kms = ["dep:aws-sdk-kms", "dep:aws-config"]
 cache = []
 tokio = ["aws-sdk-kms?/rt-tokio"]
 
 [[example]]
 name = "kms"
-required-features = ["aws-kms"]
+required-features = ["aws-kms", "cache"]
 
 [[example]]
 name = "kms-benchmark"
-required-features = ["aws-kms"]
+required-features = ["aws-kms", "cache"]

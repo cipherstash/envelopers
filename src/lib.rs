@@ -95,6 +95,8 @@ mod kms_key_provider;
 #[cfg(feature = "cache")]
 mod caching_key_wrapper;
 
+use std::marker::PhantomData;
+
 pub use crate::key_provider::{DataKey, KeyProvider};
 
 #[cfg(feature = "cache")]
@@ -108,7 +110,7 @@ pub use aes_gcm::aes::cipher::consts::U16;
 pub use aes_gcm::Key;
 
 use aes_gcm::aead::{Aead, Payload};
-use aes_gcm::{Aes128Gcm, KeyInit, Nonce};
+use aes_gcm::{Aes128Gcm, KeyInit, KeySizeUser, Nonce};
 // Or `Aes256Gcm`
 use async_mutex::Mutex as AsyncMutex;
 use rand_chacha::ChaChaRng;
@@ -136,21 +138,23 @@ impl EncryptedRecord {
     }
 }
 
-pub struct EnvelopeCipher<K, R: SafeRng = ChaChaRng> {
+pub struct EnvelopeCipher<S, K, R: SafeRng = ChaChaRng> {
+    aes: PhantomData<S>,
     pub provider: K,
     pub rng: AsyncMutex<R>,
 }
 
-impl<K, R: SafeRng> EnvelopeCipher<K, R> {
+impl<S, K, R: SafeRng> EnvelopeCipher<S, K, R> {
     pub fn init(provider: K) -> Self {
         Self {
+            aes: PhantomData,
             provider,
             rng: AsyncMutex::new(R::from_entropy()),
         }
     }
 }
 
-impl<K: KeyProvider, R: SafeRng> EnvelopeCipher<K, R> {
+impl<S: KeyInit + KeySizeUser + Aead, K: KeyProvider<S>, R: SafeRng> EnvelopeCipher<S, K, R> {
     pub async fn decrypt(
         &self,
         encrypted_record: &EncryptedRecord,
@@ -167,7 +171,7 @@ impl<K: KeyProvider, R: SafeRng> EnvelopeCipher<K, R> {
             aad: aad.as_bytes(),
         };
 
-        let cipher = Aes128Gcm::new(&key);
+        let cipher = S::new(&key);
         let message = cipher.decrypt(Nonce::from_slice(&encrypted_record.nonce), payload)?;
 
         Ok(message)
@@ -207,26 +211,28 @@ impl<K: KeyProvider, R: SafeRng> EnvelopeCipher<K, R> {
 }
 
 // Ensure that all supported EnvelopeCiphers can be shared between threads
-assert_impl_all!(EnvelopeCipher<SimpleKeyProvider>: Send, Sync);
-assert_impl_all!(EnvelopeCipher<Box<dyn KeyProvider>>: Send, Sync);
+assert_impl_all!(EnvelopeCipher<Aes128Gcm, SimpleKeyProvider<Aes128Gcm>>: Send, Sync);
+assert_impl_all!(EnvelopeCipher<Aes128Gcm, Box<dyn KeyProvider<Aes128Gcm>>>: Send, Sync);
 
 #[cfg(feature = "aws-kms")]
-assert_impl_all!(EnvelopeCipher<KMSKeyProvider>: Send, Sync);
+assert_impl_all!(EnvelopeCipher<Aes128Gcm, KMSKeyProvider<Aes128Gcm>>: Send, Sync);
 
 #[cfg(feature = "cache")]
-assert_impl_all!(EnvelopeCipher<CachingKeyWrapper<SimpleKeyProvider>>: Send, Sync);
+assert_impl_all!(EnvelopeCipher<Aes128Gcm, CachingKeyWrapper<Aes128Gcm, SimpleKeyProvider<Aes128Gcm>>>: Send, Sync);
 
-#[cfg(feature = "cache")]
-assert_impl_all!(EnvelopeCipher<CachingKeyWrapper<KMSKeyProvider>>: Send, Sync);
+#[cfg(all(feature = "cache", feature = "aws-kms"))]
+assert_impl_all!(EnvelopeCipher<Aes128Gcm, CachingKeyWrapper<Aes128Gcm, KMSKeyProvider<Aes128Gcm>>>: Send, Sync);
 
 #[cfg(test)]
 mod tests {
+    use aes_gcm::Aes128Gcm;
+
     use crate::{CacheOptions, CachingKeyWrapper, EnvelopeCipher, KeyProvider, SimpleKeyProvider};
 
     #[tokio::test]
     async fn test_encrypt_decrypt() {
-        let provider: SimpleKeyProvider = SimpleKeyProvider::init([1; 16]);
-        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
+        let provider: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([1; 16]);
+        let cipher: EnvelopeCipher<Aes128Gcm, _> = EnvelopeCipher::init(provider);
 
         let message = "hello".as_bytes();
 
@@ -238,8 +244,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_encrypt_decrypt_boxed() {
-        let provider: SimpleKeyProvider = SimpleKeyProvider::init([1; 16]);
-        let cipher: EnvelopeCipher<Box<dyn KeyProvider>> = EnvelopeCipher::init(Box::new(provider));
+        let provider: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([1; 16]);
+        let cipher: EnvelopeCipher<Aes128Gcm, Box<dyn KeyProvider<_>>> =
+            EnvelopeCipher::init(Box::new(provider));
 
         let message = "hello".as_bytes();
 
@@ -251,10 +258,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_encrypt_decrypt_cache() {
-        let provider: CachingKeyWrapper<SimpleKeyProvider> =
-            CachingKeyWrapper::new(SimpleKeyProvider::init([1; 16]), CacheOptions::default());
+        let provider = SimpleKeyProvider::<Aes128Gcm>::init([1; 16]);
+        let provider = CachingKeyWrapper::new(provider, CacheOptions::default());
 
-        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
 
         let message = "hello".as_bytes();
 
