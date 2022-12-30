@@ -1,4 +1,4 @@
-use aes_gcm::aes::cipher::consts::U16;
+
 use aes_gcm::aes::Aes128;
 use aes_gcm::Key;
 use async_mutex::Mutex as AsyncMutex;
@@ -237,7 +237,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::{CacheOptions, CachingKeyWrapper};
-    use crate::{DataKey, Key, KeyDecryptionError, KeyGenerationError, KeyProvider, U16};
+    use crate::{DataKey, Key, KeyDecryptionError, KeyGenerationError, KeyProvider};
     use aes_gcm::{
         aead::{Aead, Payload},
         aes::Aes128,

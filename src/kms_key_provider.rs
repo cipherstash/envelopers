@@ -6,7 +6,7 @@ use aws_sdk_kms::{Client, Config, Credentials, Region};
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
 use crate::key_provider::{DataKey, KeyProvider};
-use aes_gcm::aes::cipher::consts::U16;
+
 use aes_gcm::aes::Aes128;
 use aes_gcm::Key;
 
