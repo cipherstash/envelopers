@@ -1,8 +1,8 @@
 use async_trait::async_trait;
+use aws_config::RetryConfig;
 use aws_sdk_kms::model::DataKeySpec;
 use aws_sdk_kms::types::Blob;
 use aws_sdk_kms::{Client, Config, Credentials, Region};
-use aws_config::RetryConfig;
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
 use crate::key_provider::{DataKey, KeyProvider};
@@ -61,7 +61,10 @@ impl KMSKeyProvider {
 
 #[async_trait]
 impl KeyProvider for KMSKeyProvider {
-    async fn generate_data_key(&self, _bytes_to_encrypt: usize) -> Result<DataKey, KeyGenerationError> {
+    async fn generate_data_key(
+        &self,
+        _bytes_to_encrypt: usize,
+    ) -> Result<DataKey, KeyGenerationError> {
         let mut response = self
             .client
             .generate_data_key()
