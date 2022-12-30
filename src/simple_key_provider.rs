@@ -1,9 +1,9 @@
 //! Trait for a KeyProvider
 
-use aes_gcm::aead::{Aead, NewAead, Payload};
+use aes_gcm::aead::{Aead, Payload};
 use aes_gcm::aes::cipher::consts::U16;
 use aes_gcm::aes::Aes128; // Or Aes256
-use aes_gcm::{AesGcm, Key};
+use aes_gcm::{AesGcm, Key, KeyInit};
 use async_trait::async_trait;
 use rand_chacha::ChaChaRng;
 use std::sync::Mutex;
@@ -85,9 +85,12 @@ impl<R: SafeRng> SimpleKeyProvider<R> {
 
 #[async_trait]
 impl<R: SafeRng> KeyProvider for SimpleKeyProvider<R> {
-    async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<U16>, KeyDecryptionError> {
-        let key = Key::from_slice(&self.kek);
-        let cipher = AesGcm::<Aes128, U16>::new(key);
+    async fn decrypt_data_key(
+        &self,
+        encrypted_key: &[u8],
+    ) -> Result<Key<Aes128>, KeyDecryptionError> {
+        // let key = Key::from_slice(&self.kek);
+        let cipher = AesGcm::<Aes128, U16>::new_from_slice(&self.kek).unwrap();
 
         let decoded_key = EncryptedSimpleKey::from_slice(encrypted_key)?;
 
@@ -99,15 +102,14 @@ impl<R: SafeRng> KeyProvider for SimpleKeyProvider<R> {
             },
         )?;
 
-        return Ok(*Key::from_slice(&data_key));
+        return Ok(*Key::<Aes128>::from_slice(&data_key));
     }
 
     async fn generate_data_key(&self, _bytes: usize) -> Result<DataKey, KeyGenerationError> {
-        let key = Key::from_slice(&self.kek);
-        let cipher = AesGcm::<Aes128, U16>::new(key);
+        let cipher = AesGcm::<Aes128, U16>::new_from_slice(&self.kek).unwrap();
 
         let version = 1;
-        let mut data_key: Key<U16> = Default::default();
+        let mut data_key: Key<Aes128> = Default::default();
         let mut nonce: Nonce = Default::default();
 
         {

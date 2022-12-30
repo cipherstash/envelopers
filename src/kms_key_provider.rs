@@ -7,6 +7,7 @@ use aws_sdk_kms::{Client, Config, Credentials, Region};
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
 use crate::key_provider::{DataKey, KeyProvider};
 use aes_gcm::aes::cipher::consts::U16;
+use aes_gcm::aes::Aes128;
 use aes_gcm::Key;
 
 pub struct KMSKeyProvider {
@@ -92,7 +93,7 @@ impl KeyProvider for KMSKeyProvider {
             KeyGenerationError::Other(String::from("Response did not contain plaintext key"))
         })?;
 
-        let key = Key::clone_from_slice(plaintext_blob.as_ref());
+        let key = Key::<Aes128>::clone_from_slice(plaintext_blob.as_ref());
 
         Ok(DataKey {
             key,
@@ -101,7 +102,10 @@ impl KeyProvider for KMSKeyProvider {
         })
     }
 
-    async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<U16>, KeyDecryptionError> {
+    async fn decrypt_data_key(
+        &self,
+        encrypted_key: &[u8],
+    ) -> Result<Key<Aes128>, KeyDecryptionError> {
         let response = self
             .client
             .decrypt()
@@ -114,7 +118,7 @@ impl KeyProvider for KMSKeyProvider {
             KeyDecryptionError::Other(String::from("Response did not contain plaintext key"))
         })?;
 
-        Ok(Key::clone_from_slice(plaintext_blob.as_ref()))
+        Ok(Key::<Aes128>::clone_from_slice(plaintext_blob.as_ref()))
     }
 }
 

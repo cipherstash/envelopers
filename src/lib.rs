@@ -107,8 +107,8 @@ pub use crate::kms_key_provider::KMSKeyProvider;
 pub use aes_gcm::aes::cipher::consts::U16;
 pub use aes_gcm::Key;
 
-use aes_gcm::aead::{Aead, NewAead, Payload};
-use aes_gcm::{Aes128Gcm, Nonce};
+use aes_gcm::aead::{Aead, Payload};
+use aes_gcm::{Aes128Gcm, KeyInit, Nonce};
 // Or `Aes256Gcm`
 use async_mutex::Mutex as AsyncMutex;
 use rand_chacha::ChaChaRng;
@@ -193,8 +193,8 @@ impl<K: KeyProvider, R: SafeRng> EnvelopeCipher<K, R> {
         let nonce = Nonce::from_slice(&nonce_data);
 
         // TODO: Use Zeroize for the drop
-        let key = Key::from_slice(&data_key.key);
-        let cipher = Aes128Gcm::new(key);
+        // let key = Key::from_slice(&data_key.key);
+        let cipher = Aes128Gcm::new_from_slice(&data_key.key).unwrap();
         let ciphertext = cipher.encrypt(nonce, payload)?;
 
         Ok(EncryptedRecord {
