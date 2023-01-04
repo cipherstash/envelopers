@@ -149,8 +149,6 @@ macro_rules! define_simple_key_provider_impl {
     };
 }
 
-// define_simple_key_provider_impl!(Aes128);
-// define_simple_key_provider_impl!(Aes256);
 define_simple_key_provider_impl!(Aes128Gcm);
 define_simple_key_provider_impl!(Aes256Gcm);
 

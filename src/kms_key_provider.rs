@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
 
-use aes_gcm::aes::Aes128;
 use async_trait::async_trait;
 use aws_config::RetryConfig;
 use aws_sdk_kms::model::DataKeySpec;
@@ -132,14 +131,13 @@ macro_rules! define_kms_key_provider_impl {
     };
 }
 
-define_kms_key_provider_impl!(Aes128, DataKeySpec::Aes128);
 define_kms_key_provider_impl!(Aes128Gcm, DataKeySpec::Aes128);
 define_kms_key_provider_impl!(Aes256Gcm, DataKeySpec::Aes256);
 
 #[cfg(test)]
 mod tests {
 
-    use aes_gcm::{aes::Aes128, Aes128Gcm};
+    use aes_gcm::Aes128Gcm;
     use aws_sdk_kms::{Client, Config, Credentials, Region};
     use aws_smithy_client::test_connection::TestConnection;
     use aws_smithy_http::body::SdkBody;
@@ -230,16 +228,14 @@ mod tests {
             "{}",
             200,
             |client| async move {
-                let provider = KMSKeyProvider::<Aes128>::new(client, key_id.into());
+                let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
                 let result = provider.generate_data_key(0).await;
 
-                assert_eq!(
-                    result
-                        .map_err(|e| e.to_string())
-                        .expect_err("Expected result to be error"),
-                    String::from("Response did not contain encrypted key")
-                );
+                match result {
+                    Ok(_) => panic!("Expected result to be an error"),
+                    Err(e) => assert_eq!(e.to_string(), "Response did not contain encrypted key"),
+                }
             },
         )
         .await;
@@ -259,16 +255,14 @@ mod tests {
             ),
             200,
             |client| async move {
-                let provider = KMSKeyProvider::<Aes128>::new(client, key_id.into());
+                let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
                 let result = provider.generate_data_key(0).await;
 
-                assert_eq!(
-                    result
-                        .map_err(|e| e.to_string())
-                        .expect_err("Expected result to be error"),
-                    String::from("Response did not contain plaintext key")
-                );
+                match result {
+                    Ok(_) => panic!("Expected result to be an error"),
+                    Err(e) => assert_eq!(e.to_string(), "Response did not contain plaintext key"),
+                }
             },
         )
         .await;
@@ -289,16 +283,14 @@ mod tests {
             ),
             200,
             |client| async move {
-                let provider = KMSKeyProvider::<Aes128>::new(client, key_id.into());
+                let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
                 let result = provider.generate_data_key(0).await;
 
-                assert_eq!(
-                    result
-                        .map_err(|e| e.to_string())
-                        .expect_err("Expected result to be error"),
-                    String::from("Response did not contain key_id")
-                );
+                match result {
+                    Ok(_) => panic!("Expected result to be an error"),
+                    Err(e) => assert_eq!(e.to_string(), "Response did not contain key_id"),
+                }
             },
         )
         .await;
@@ -313,16 +305,16 @@ mod tests {
             "{}",
             500,
             |client| async move {
-                let provider = KMSKeyProvider::<Aes128>::new(client, key_id.into());
+                let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
                 let result = provider.generate_data_key(0).await;
 
-                assert_eq!(
-                    result
-                        .map_err(|e| e.to_string())
-                        .expect_err("Expected result to be error"),
-                    String::from("KMS generate data key request failed: Error")
-                );
+                match result {
+                    Ok(_) => panic!("Expected result to be an error"),
+                    Err(e) => {
+                        assert_eq!(e.to_string(), "KMS generate data key request failed: Error")
+                    }
+                }
             },
         )
         .await;
