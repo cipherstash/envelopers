@@ -13,7 +13,6 @@ use crate::KeyProvider;
 struct CachedEncryptionEntry<S: KeySizeUser> {
     #[zeroize(skip)]
     created_at: Instant,
-    #[zeroize(skip)]
     key: DataKey<S>,
     bytes_encrypted: usize,
     messages_encrypted: usize,
@@ -22,9 +21,8 @@ struct CachedEncryptionEntry<S: KeySizeUser> {
 #[derive(ZeroizeOnDrop)]
 struct CachedDecryptionEntry<S: KeySizeUser> {
     #[zeroize(skip)]
-    key: Key<S>,
-    #[zeroize(skip)]
     created_at: Instant,
+    key: Key<S>,
 }
 
 /// The options for configuring a [`CachingKeyWrapper`]'s cache
@@ -182,7 +180,7 @@ impl<S: KeySizeUser + Clone, K> CachingKeyWrapper<S, K> {
         decryption_cache.put(
             key.encrypted_key.clone(),
             CachedDecryptionEntry {
-                key: key.key,
+                key: key.key.clone(),
                 created_at: Instant::now(),
             },
         );
@@ -405,14 +403,17 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        let DataKey { encrypted_key, .. } = cache
+        let data_key = cache
             .generate_data_key(10)
             .await
             .expect("Expected generate to succeed");
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
-        assert!(cache.decrypt_data_key(&encrypted_key).await.is_ok());
+        assert!(cache
+            .decrypt_data_key(&data_key.encrypted_key)
+            .await
+            .is_ok());
 
         // No keys were decrypted because they were in the cache
         assert_eq!(cache.provider.get_decrypt_count(), 0);

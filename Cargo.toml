@@ -28,7 +28,7 @@ serde_cbor = "0.11.2"
 thiserror = "1.0.30"
 async-trait = "0.1.53"
 lru = "0.7.5"
-zeroize = { version = "1.5.5", features = [ "zeroize_derive" ] }
+zeroize = { version = "1.5.7", features = [ "zeroize_derive" ] }
 static_assertions = "1.1.0"
 
 aws-sdk-kms = { version = "0.10.1", optional = true }

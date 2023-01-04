@@ -182,7 +182,7 @@ impl<S: KeyInit + KeySizeUser + Aead, K: KeyProvider<S>, R: SafeRng> EnvelopeCip
 
         let data_key = self.provider.generate_data_key(msg.len()).await?;
 
-        let key_id = data_key.key_id;
+        let key_id = data_key.key_id.clone();
 
         {
             let mut rng = self.rng.lock().await;
@@ -204,7 +204,7 @@ impl<S: KeyInit + KeySizeUser + Aead, K: KeyProvider<S>, R: SafeRng> EnvelopeCip
         Ok(EncryptedRecord {
             ciphertext,
             nonce: nonce_data,
-            encrypted_key: data_key.encrypted_key,
+            encrypted_key: data_key.encrypted_key.clone(),
             key_id,
         })
     }

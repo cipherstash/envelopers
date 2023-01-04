@@ -157,7 +157,7 @@ mod tests {
     use aes_gcm::Aes128Gcm;
 
     use super::{EncryptedSimpleKey, Nonce};
-    use crate::{key_provider::DataKey, KeyProvider, SimpleKeyProvider};
+    use crate::{KeyProvider, SimpleKeyProvider};
 
     fn create_provider() -> SimpleKeyProvider<Aes128Gcm> {
         SimpleKeyProvider::init([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
@@ -167,13 +167,14 @@ mod tests {
     async fn test_generate_decrypt_data_key() {
         let provider = create_provider();
 
-        let DataKey {
-            encrypted_key, key, ..
-        } = provider.generate_data_key(0).await.unwrap();
+        let data_key = provider.generate_data_key(0).await.unwrap();
 
         assert_eq!(
-            key,
-            provider.decrypt_data_key(&encrypted_key).await.unwrap()
+            data_key.key,
+            provider
+                .decrypt_data_key(&data_key.encrypted_key)
+                .await
+                .unwrap()
         );
     }
 
@@ -181,13 +182,14 @@ mod tests {
     async fn test_generate_decrypt_data_key_boxed() {
         let provider: Box<dyn KeyProvider<Aes128Gcm>> = Box::new(create_provider());
 
-        let DataKey {
-            encrypted_key, key, ..
-        } = provider.generate_data_key(0).await.unwrap();
+        let data_key = provider.generate_data_key(0).await.unwrap();
 
         assert_eq!(
-            key,
-            provider.decrypt_data_key(&encrypted_key).await.unwrap()
+            data_key.key,
+            provider
+                .decrypt_data_key(&data_key.encrypted_key)
+                .await
+                .unwrap()
         );
     }
 
@@ -196,11 +198,11 @@ mod tests {
         let first: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([0; 16]);
         let second: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([1; 16]);
 
-        let DataKey { encrypted_key, .. } = first.generate_data_key(0).await.unwrap();
+        let data_key = first.generate_data_key(0).await.unwrap();
 
         assert_eq!(
             second
-                .decrypt_data_key(&encrypted_key)
+                .decrypt_data_key(&data_key.encrypted_key)
                 .await
                 .map_err(|e| e.to_string())
                 .expect_err("Decrypting data key suceeded"),
@@ -212,20 +214,21 @@ mod tests {
     async fn test_fails_on_invalid_nonce() {
         let provider: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([0; 16]);
 
-        let DataKey {
-            mut encrypted_key, ..
-        } = provider.generate_data_key(0).await.unwrap();
+        let mut data_key = provider.generate_data_key(0).await.unwrap();
 
         // Decrypts data key fine
-        assert!(provider.decrypt_data_key(&encrypted_key).await.is_ok());
+        assert!(provider
+            .decrypt_data_key(&data_key.encrypted_key)
+            .await
+            .is_ok());
 
         // Replace the nonce with a nonsense one
-        encrypted_key[1..17]
+        data_key.encrypted_key[1..17]
             .clone_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
 
         assert_eq!(
             provider
-                .decrypt_data_key(&encrypted_key)
+                .decrypt_data_key(&data_key.encrypted_key)
                 .await
                 .map_err(|e| e.to_string())
                 .expect_err("Decrypting data key succeeded"),
@@ -237,19 +240,20 @@ mod tests {
     async fn test_fails_on_invalid_version() {
         let provider: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([0; 16]);
 
-        let DataKey {
-            mut encrypted_key, ..
-        } = provider.generate_data_key(0).await.unwrap();
+        let mut data_key = provider.generate_data_key(0).await.unwrap();
 
         // Decrypts data key fine
-        assert!(provider.decrypt_data_key(&encrypted_key).await.is_ok());
+        assert!(provider
+            .decrypt_data_key(&data_key.encrypted_key)
+            .await
+            .is_ok());
 
         // Replace key version with invalid one
-        encrypted_key[0] = 5;
+        data_key.encrypted_key[0] = 5;
 
         assert_eq!(
             provider
-                .decrypt_data_key(&encrypted_key)
+                .decrypt_data_key(&data_key.encrypted_key)
                 .await
                 .map_err(|e| e.to_string())
                 .expect_err("Decrypting data key succeeded"),

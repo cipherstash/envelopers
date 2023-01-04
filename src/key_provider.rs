@@ -3,11 +3,11 @@
 use aes_gcm::Key;
 use aes_gcm::KeySizeUser;
 use async_trait::async_trait;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
 
-#[derive(Debug, Clone, Zeroize)]
+#[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
 pub struct DataKey<S: KeySizeUser> {
     pub key: Key<S>,
     // TODO: Maybe make a type for EncryptedKey
