@@ -1,5 +1,4 @@
-use aes_gcm::aes::cipher::consts::U16;
-use aes_gcm::Key;
+use aes_gcm::{Key, KeySizeUser};
 use async_mutex::Mutex as AsyncMutex;
 use async_trait::async_trait;
 use lru::LruCache;
@@ -11,19 +10,19 @@ use crate::key_provider::DataKey;
 use crate::KeyProvider;
 
 #[derive(ZeroizeOnDrop)]
-struct CachedEncryptionEntry {
+struct CachedEncryptionEntry<S: KeySizeUser> {
     #[zeroize(skip)]
     created_at: Instant,
-    key: DataKey,
+    key: DataKey<S>,
     bytes_encrypted: usize,
     messages_encrypted: usize,
 }
 
 #[derive(ZeroizeOnDrop)]
-struct CachedDecryptionEntry {
-    key: Key<U16>,
+struct CachedDecryptionEntry<S: KeySizeUser> {
     #[zeroize(skip)]
     created_at: Instant,
+    key: Key<S>,
 }
 
 /// The options for configuring a [`CachingKeyWrapper`]'s cache
@@ -78,14 +77,17 @@ impl Default for CacheOptions {
 /// - max messages encrypted per key
 /// - max bytes encrypted per key
 /// - max time key can be cached for
-pub struct CachingKeyWrapper<K> {
-    encryption_cache: AsyncMutex<Vec<CachedEncryptionEntry>>,
-    decryption_cache: AsyncMutex<LruCache<Vec<u8>, CachedDecryptionEntry>>,
+pub struct CachingKeyWrapper<S: KeySizeUser, K> {
+    encryption_cache: AsyncMutex<Vec<CachedEncryptionEntry<S>>>,
+    decryption_cache: AsyncMutex<LruCache<Vec<u8>, CachedDecryptionEntry<S>>>,
     options: CacheOptions,
     provider: K,
 }
 
-impl<K> CachingKeyWrapper<K> {
+impl<S: KeySizeUser + Clone, K> CachingKeyWrapper<S, K>
+where
+    Key<S>: Copy,
+{
     /// Create a new CachingKeyWrapper from a certain key provider and caching options
     pub fn new(provider: K, options: CacheOptions) -> Self {
         Self {
@@ -96,7 +98,7 @@ impl<K> CachingKeyWrapper<K> {
         }
     }
 
-    fn has_exceeded_limits(&self, entry: &CachedEncryptionEntry) -> bool {
+    fn has_exceeded_limits(&self, entry: &CachedEncryptionEntry<S>) -> bool {
         entry.created_at.elapsed() > self.options.max_age
             || entry.messages_encrypted > self.options.max_messages
             || entry.bytes_encrypted > self.options.max_bytes
@@ -104,7 +106,7 @@ impl<K> CachingKeyWrapper<K> {
 
     fn maybe_prune_last_decryption_entry(
         &self,
-        cache: &mut LruCache<Vec<u8>, CachedDecryptionEntry>,
+        cache: &mut LruCache<Vec<u8>, CachedDecryptionEntry<S>>,
     ) {
         let should_pop = cache
             .peek_lru()
@@ -118,7 +120,7 @@ impl<K> CachingKeyWrapper<K> {
         }
     }
 
-    async fn get_and_increment_cached_encryption_key(&self, bytes: usize) -> Option<DataKey> {
+    async fn get_and_increment_cached_encryption_key(&self, bytes: usize) -> Option<DataKey<S>> {
         let mut cached = self.encryption_cache.lock().await;
 
         while let Some(mut cached_entry) = cached.pop() {
@@ -141,7 +143,7 @@ impl<K> CachingKeyWrapper<K> {
         None
     }
 
-    async fn get_cached_decryption_key(&self, encrypted_key: &Vec<u8>) -> Option<Key<U16>> {
+    async fn get_cached_decryption_key(&self, encrypted_key: &[u8]) -> Option<Key<S>> {
         let mut decryption_cache = self.decryption_cache.lock().await;
 
         if let Some(cached_key) = decryption_cache.get(encrypted_key) {
@@ -157,7 +159,7 @@ impl<K> CachingKeyWrapper<K> {
         None
     }
 
-    async fn cache_encryption_key(&self, bytes: usize, key: DataKey) {
+    async fn cache_encryption_key(&self, bytes: usize, key: DataKey<S>) {
         let mut cached = self.encryption_cache.lock().await;
         let mut decryption_cache = self.decryption_cache.lock().await;
 
@@ -187,10 +189,10 @@ impl<K> CachingKeyWrapper<K> {
         );
     }
 
-    async fn cache_decryption_key(&self, encrypted_key: &Vec<u8>, plaintext_key: Key<U16>) {
+    async fn cache_decryption_key(&self, encrypted_key: &[u8], plaintext_key: Key<S>) {
         self.decryption_cache.lock().await.put(
             // Sucks that you have to clone here - surely they can hash from a reference
-            encrypted_key.clone(),
+            encrypted_key.to_vec(),
             CachedDecryptionEntry {
                 key: plaintext_key,
                 created_at: Instant::now(),
@@ -200,11 +202,11 @@ impl<K> CachingKeyWrapper<K> {
 }
 
 #[async_trait]
-impl<K> KeyProvider for CachingKeyWrapper<K>
+impl<S: KeySizeUser + Clone, K: KeyProvider<S>> KeyProvider<S> for CachingKeyWrapper<S, K>
 where
-    K: KeyProvider,
+    Key<S>: Copy,
 {
-    async fn generate_data_key(&self, bytes: usize) -> Result<DataKey, KeyGenerationError> {
+    async fn generate_data_key(&self, bytes: usize) -> Result<DataKey<S>, KeyGenerationError> {
         if let Some(cached_key) = self.get_and_increment_cached_encryption_key(bytes).await {
             return Ok(cached_key);
         }
@@ -216,10 +218,7 @@ where
         Ok(key)
     }
 
-    async fn decrypt_data_key(
-        &self,
-        encrypted_key: &Vec<u8>,
-    ) -> Result<Key<U16>, KeyDecryptionError> {
+    async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<S>, KeyDecryptionError> {
         if let Some(cached_key) = self.get_cached_decryption_key(encrypted_key).await {
             return Ok(cached_key);
         }
@@ -236,10 +235,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::{CacheOptions, CachingKeyWrapper};
-    use crate::{DataKey, Key, KeyDecryptionError, KeyGenerationError, KeyProvider, U16};
+    use crate::{DataKey, Key, KeyDecryptionError, KeyGenerationError, KeyProvider};
     use aes_gcm::{
         aead::{Aead, Payload},
-        Aes128Gcm, NewAead,
+        aes::Aes128,
+        Aes128Gcm, KeyInit, Nonce,
     };
     use async_trait::async_trait;
     use std::{
@@ -248,11 +248,11 @@ mod tests {
     };
 
     fn test_encrypt_bytes(bytes: &[u8]) -> Vec<u8> {
-        let cipher = Aes128Gcm::new(Key::from_slice(&[1; 16]));
+        let cipher = Aes128Gcm::new_from_slice(&[1; 16]).unwrap();
 
         cipher
             .encrypt(
-                Key::from_slice(&[2; 12]),
+                Nonce::from_slice(&[2; 12]),
                 Payload {
                     msg: bytes,
                     aad: &[],
@@ -262,10 +262,10 @@ mod tests {
     }
 
     fn test_decrypt_bytes(bytes: &[u8]) -> Vec<u8> {
-        let cipher = Aes128Gcm::new(Key::from_slice(&[1; 16]));
+        let cipher = Aes128Gcm::new_from_slice(&[1; 16]).unwrap();
         cipher
             .decrypt(
-                Key::from_slice(&[2; 12]),
+                Nonce::from_slice(&[2; 12]),
                 Payload {
                     msg: bytes,
                     aad: &[],
@@ -291,22 +291,24 @@ mod tests {
     }
 
     #[async_trait]
-    impl KeyProvider for TestKeyProvider {
+    impl KeyProvider<Aes128Gcm> for TestKeyProvider {
         async fn decrypt_data_key(
             &self,
-            encrypted_key: &Vec<u8>,
-        ) -> Result<Key<U16>, KeyDecryptionError> {
+            encrypted_key: &[u8],
+        ) -> Result<Key<Aes128Gcm>, KeyDecryptionError> {
             self.decrypt_counter.fetch_add(1, Ordering::Relaxed);
-            Ok(Key::clone_from_slice(&test_decrypt_bytes(encrypted_key)))
+            Ok(Key::<Aes128>::clone_from_slice(&test_decrypt_bytes(
+                encrypted_key,
+            )))
         }
 
         async fn generate_data_key(
             &self,
             _bytes_to_encrypt: usize,
-        ) -> Result<DataKey, KeyGenerationError> {
+        ) -> Result<DataKey<Aes128Gcm>, KeyGenerationError> {
             let count = self.generate_counter.fetch_add(1, Ordering::Relaxed);
             // Generate a data key that is just the current count for all bytes
-            let key = Key::clone_from_slice(&[count; 16]);
+            let key = Key::<Aes128>::clone_from_slice(&[count; 16]);
             let encrypted_key = test_encrypt_bytes(&key);
             Ok(DataKey {
                 key,
@@ -316,7 +318,7 @@ mod tests {
         }
     }
 
-    fn create_test_cache() -> CachingKeyWrapper<TestKeyProvider> {
+    fn create_test_cache() -> CachingKeyWrapper<Aes128Gcm, TestKeyProvider> {
         CachingKeyWrapper::new(
             TestKeyProvider::default(),
             CacheOptions::default()
@@ -407,14 +409,17 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        let DataKey { encrypted_key, .. } = cache
+        let data_key = cache
             .generate_data_key(10)
             .await
             .expect("Expected generate to succeed");
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
-        assert!(cache.decrypt_data_key(&encrypted_key).await.is_ok());
+        assert!(cache
+            .decrypt_data_key(&data_key.encrypted_key)
+            .await
+            .is_ok());
 
         // No keys were decrypted because they were in the cache
         assert_eq!(cache.provider.get_decrypt_count(), 0);
@@ -424,7 +429,7 @@ mod tests {
     async fn test_caches_decryption() {
         let cache = create_test_cache();
 
-        let key: Key<U16> = Key::clone_from_slice(&[1; 16]);
+        let key: Key<Aes128> = Key::<Aes128>::clone_from_slice(&[1; 16]);
 
         assert!(cache
             .decrypt_data_key(&test_encrypt_bytes(&key))
@@ -451,7 +456,7 @@ mod tests {
 
         let cache = create_test_cache();
 
-        let key: Key<U16> = Key::clone_from_slice(&[1; 16]);
+        let key: Key<Aes128> = Key::<Aes128>::clone_from_slice(&[1; 16]);
 
         assert!(cache
             .decrypt_data_key(&test_encrypt_bytes(&key))

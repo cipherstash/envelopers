@@ -1,3 +1,4 @@
+use aes_gcm::Aes128Gcm;
 use aws_sdk_kms::Client;
 use envelopers::{CacheOptions, CachingKeyWrapper, EnvelopeCipher, KMSKeyProvider};
 use std::error::Error;
@@ -19,17 +20,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // - AWS_REGION
     let client = Client::new(&aws_config::from_env().load().await);
 
-    let provider = KMSKeyProvider::new(client, std::env::var("CS_KEY_ID")?);
+    let provider = KMSKeyProvider::<Aes128Gcm>::new(client, std::env::var("CS_KEY_ID")?);
 
-    let cipher: EnvelopeCipher<CachingKeyWrapper<KMSKeyProvider>> =
-        EnvelopeCipher::init(CachingKeyWrapper::new(
-            provider,
-            CacheOptions::default()
-                .with_max_age(Duration::from_secs(30))
-                .with_max_bytes(100 * 1024)
-                .with_max_messages(10)
-                .with_max_entries(10),
-        ));
+    let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(CachingKeyWrapper::new(
+        provider,
+        CacheOptions::default()
+            .with_max_age(Duration::from_secs(30))
+            .with_max_bytes(100 * 1024)
+            .with_max_messages(10)
+            .with_max_entries(10),
+    ));
 
     let encrypted = cipher
         .encrypt("This is a great test string!".as_bytes())

@@ -20,7 +20,7 @@ aws-smithy-client = { version = "0.40.2", features = [ "test-util" ] }
 aws-smithy-http = "0.40.2"
 
 [dependencies]
-aes-gcm = "0.9.4"
+aes-gcm = "0.10.1"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 serde = { version = "1.0.136", features = ["derive"] }
@@ -28,7 +28,7 @@ serde_cbor = "0.11.2"
 thiserror = "1.0.30"
 async-trait = "0.1.53"
 lru = "0.7.5"
-zeroize = { version = "1.5.5", features = [ "zeroize_derive" ] }
+zeroize = { version = "1.5.7", features = [ "zeroize_derive" ] }
 static_assertions = "1.1.0"
 
 aws-sdk-kms = { version = "0.10.1", optional = true }
@@ -38,14 +38,15 @@ async-mutex = "1.4.0"
 
 [features]
 default = ["aws-kms", "cache"]
+# default = ["aws-kms"]
 aws-kms = ["dep:aws-sdk-kms", "dep:aws-config"]
 cache = []
 tokio = ["aws-sdk-kms?/rt-tokio"]
 
 [[example]]
 name = "kms"
-required-features = ["aws-kms"]
+required-features = ["aws-kms", "cache"]
 
 [[example]]
 name = "kms-benchmark"
-required-features = ["aws-kms"]
+required-features = ["aws-kms", "cache"]

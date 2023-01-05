@@ -1,26 +1,28 @@
+use std::marker::PhantomData;
+
 use async_trait::async_trait;
+use aws_config::RetryConfig;
 use aws_sdk_kms::model::DataKeySpec;
 use aws_sdk_kms::types::Blob;
 use aws_sdk_kms::{Client, Config, Credentials, Region};
-use aws_config::RetryConfig;
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
 use crate::key_provider::{DataKey, KeyProvider};
-use aes_gcm::aes::cipher::consts::U16;
-use aes_gcm::Key;
 
-pub struct KMSKeyProvider {
+use aes_gcm::{Aes128Gcm, Aes256Gcm, Key, KeySizeUser};
+
+pub struct KMSKeyProvider<S: KeySizeUser> {
     key_id: String,
-    data_key_spec: DataKeySpec,
     client: Client,
+    phantom_data: PhantomData<S>,
 }
 
-impl KMSKeyProvider {
+impl<S: KeySizeUser> KMSKeyProvider<S> {
     pub fn new(client: Client, key_id: String) -> Self {
         Self {
             client,
-            data_key_spec: DataKeySpec::Aes128,
             key_id,
+            phantom_data: PhantomData,
         }
     }
 
@@ -52,75 +54,90 @@ impl KMSKeyProvider {
 
         Self::new(client, key_id.into())
     }
-
-    pub fn with_spec(mut self, spec: DataKeySpec) -> Self {
-        self.data_key_spec = spec;
-        self
-    }
 }
 
-#[async_trait]
-impl KeyProvider for KMSKeyProvider {
-    async fn generate_data_key(&self, _bytes_to_encrypt: usize) -> Result<DataKey, KeyGenerationError> {
-        let mut response = self
-            .client
-            .generate_data_key()
-            .key_id(&self.key_id)
-            .key_spec(self.data_key_spec.clone())
-            .send()
-            .await
-            .map_err(|e| {
-                KeyGenerationError::Other(format!("KMS generate data key request failed: {}", e))
-            })?;
+macro_rules! define_kms_key_provider_impl {
+    ($name:ty, $data_key_spec:expr) => {
+        #[async_trait]
+        impl KeyProvider<$name> for KMSKeyProvider<$name> {
+            async fn generate_data_key(
+                &self,
+                _bytes_to_encrypt: usize,
+            ) -> Result<DataKey<$name>, KeyGenerationError> {
+                let mut response = self
+                    .client
+                    .generate_data_key()
+                    .key_id(&self.key_id)
+                    .key_spec($data_key_spec)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        KeyGenerationError::Other(format!(
+                            "KMS generate data key request failed: {}",
+                            e
+                        ))
+                    })?;
 
-        let encrypted_key = response
-            .ciphertext_blob
-            .take()
-            .ok_or_else(|| {
-                KeyGenerationError::Other(String::from("Response did not contain encrypted key"))
-            })?
-            .into_inner();
+                let encrypted_key = response
+                    .ciphertext_blob
+                    .take()
+                    .ok_or_else(|| {
+                        KeyGenerationError::Other(String::from(
+                            "Response did not contain encrypted key",
+                        ))
+                    })?
+                    .into_inner();
 
-        let key_id = response.key_id.ok_or_else(|| {
-            KeyGenerationError::Other(String::from("Response did not contain key_id"))
-        })?;
+                let key_id = response.key_id.ok_or_else(|| {
+                    KeyGenerationError::Other(String::from("Response did not contain key_id"))
+                })?;
 
-        let plaintext_blob = response.plaintext.ok_or_else(|| {
-            KeyGenerationError::Other(String::from("Response did not contain plaintext key"))
-        })?;
+                let plaintext_blob = response.plaintext.ok_or_else(|| {
+                    KeyGenerationError::Other(String::from(
+                        "Response did not contain plaintext key",
+                    ))
+                })?;
 
-        let key = Key::clone_from_slice(plaintext_blob.as_ref());
+                let key = Key::<$name>::clone_from_slice(plaintext_blob.as_ref());
 
-        Ok(DataKey {
-            key,
-            encrypted_key,
-            key_id,
-        })
-    }
+                Ok(DataKey {
+                    key,
+                    encrypted_key,
+                    key_id,
+                })
+            }
 
-    async fn decrypt_data_key(
-        &self,
-        encrypted_key: &Vec<u8>,
-    ) -> Result<Key<U16>, KeyDecryptionError> {
-        let response = self
-            .client
-            .decrypt()
-            .ciphertext_blob(Blob::new(encrypted_key.clone()))
-            .send()
-            .await
-            .map_err(|e| KeyDecryptionError::Other(e.to_string()))?;
+            async fn decrypt_data_key(
+                &self,
+                encrypted_key: &[u8],
+            ) -> Result<Key<$name>, KeyDecryptionError> {
+                let response = self
+                    .client
+                    .decrypt()
+                    .ciphertext_blob(Blob::new(encrypted_key.to_vec()))
+                    .send()
+                    .await
+                    .map_err(|e| KeyDecryptionError::Other(e.to_string()))?;
 
-        let plaintext_blob = response.plaintext().ok_or_else(|| {
-            KeyDecryptionError::Other(String::from("Response did not contain plaintext key"))
-        })?;
+                let plaintext_blob = response.plaintext().ok_or_else(|| {
+                    KeyDecryptionError::Other(String::from(
+                        "Response did not contain plaintext key",
+                    ))
+                })?;
 
-        Ok(Key::clone_from_slice(plaintext_blob.as_ref()))
-    }
+                Ok(Key::<$name>::clone_from_slice(plaintext_blob.as_ref()))
+            }
+        }
+    };
 }
+
+define_kms_key_provider_impl!(Aes128Gcm, DataKeySpec::Aes128);
+define_kms_key_provider_impl!(Aes256Gcm, DataKeySpec::Aes256);
 
 #[cfg(test)]
 mod tests {
 
+    use aes_gcm::Aes128Gcm;
     use aws_sdk_kms::{Client, Config, Credentials, Region};
     use aws_smithy_client::test_connection::TestConnection;
     use aws_smithy_http::body::SdkBody;
@@ -187,7 +204,7 @@ mod tests {
             ),
             200,
             |client| async move {
-                let provider = KMSKeyProvider::new(client, key_id.into());
+                let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
                 let key = provider
                     .generate_data_key(0)
@@ -211,16 +228,14 @@ mod tests {
             "{}",
             200,
             |client| async move {
-                let provider = KMSKeyProvider::new(client, key_id.into());
+                let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
                 let result = provider.generate_data_key(0).await;
 
-                assert_eq!(
-                    result
-                        .map_err(|e| e.to_string())
-                        .expect_err("Expected result to be error"),
-                    String::from("Response did not contain encrypted key")
-                );
+                match result {
+                    Ok(_) => panic!("Expected result to be an error"),
+                    Err(e) => assert_eq!(e.to_string(), "Response did not contain encrypted key"),
+                }
             },
         )
         .await;
@@ -240,16 +255,14 @@ mod tests {
             ),
             200,
             |client| async move {
-                let provider = KMSKeyProvider::new(client, key_id.into());
+                let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
                 let result = provider.generate_data_key(0).await;
 
-                assert_eq!(
-                    result
-                        .map_err(|e| e.to_string())
-                        .expect_err("Expected result to be error"),
-                    String::from("Response did not contain plaintext key")
-                );
+                match result {
+                    Ok(_) => panic!("Expected result to be an error"),
+                    Err(e) => assert_eq!(e.to_string(), "Response did not contain plaintext key"),
+                }
             },
         )
         .await;
@@ -270,16 +283,14 @@ mod tests {
             ),
             200,
             |client| async move {
-                let provider = KMSKeyProvider::new(client, key_id.into());
+                let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
                 let result = provider.generate_data_key(0).await;
 
-                assert_eq!(
-                    result
-                        .map_err(|e| e.to_string())
-                        .expect_err("Expected result to be error"),
-                    String::from("Response did not contain key_id")
-                );
+                match result {
+                    Ok(_) => panic!("Expected result to be an error"),
+                    Err(e) => assert_eq!(e.to_string(), "Response did not contain key_id"),
+                }
             },
         )
         .await;
@@ -294,16 +305,16 @@ mod tests {
             "{}",
             500,
             |client| async move {
-                let provider = KMSKeyProvider::new(client, key_id.into());
+                let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
                 let result = provider.generate_data_key(0).await;
 
-                assert_eq!(
-                    result
-                        .map_err(|e| e.to_string())
-                        .expect_err("Expected result to be error"),
-                    String::from("KMS generate data key request failed: Error")
-                );
+                match result {
+                    Ok(_) => panic!("Expected result to be an error"),
+                    Err(e) => {
+                        assert_eq!(e.to_string(), "KMS generate data key request failed: Error")
+                    }
+                }
             },
         )
         .await;
