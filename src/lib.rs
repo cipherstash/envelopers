@@ -105,6 +105,7 @@ pub use crate::caching_key_wrapper::{CacheOptions, CachingKeyWrapper};
 pub use crate::kms_key_provider::KMSKeyProvider;
 
 pub use aes_gcm::{Aes128Gcm, Aes256Gcm, Key};
+pub use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
 
 pub use errors::{DecryptionError, EncryptionError, KeyDecryptionError, KeyGenerationError};
 
@@ -221,6 +222,7 @@ assert_impl_all!(EnvelopeCipher<Aes128Gcm, CachingKeyWrapper<Aes128Gcm, KMSKeyPr
 #[cfg(test)]
 mod tests {
     use aes_gcm::{aead::Aead, Aes128Gcm, Aes256Gcm, KeyInit, KeySizeUser};
+    use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
 
     use crate::{CacheOptions, CachingKeyWrapper, EnvelopeCipher, KeyProvider, SimpleKeyProvider};
 
@@ -256,6 +258,30 @@ mod tests {
         let provider: SimpleKeyProvider<Aes256Gcm> = SimpleKeyProvider::init([1; 16]);
         let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
         let cipher: EnvelopeCipher<Aes256Gcm, _> = EnvelopeCipher::init(provider);
+        test_encrypt_decrypt(cipher).await;
+    }
+
+    #[tokio::test]
+    async fn test_encrypt_decrypt_128_gcm_siv() {
+        let provider: SimpleKeyProvider<Aes128GcmSiv> = SimpleKeyProvider::init([1; 16]);
+        let cipher: EnvelopeCipher<Aes128GcmSiv, _> = EnvelopeCipher::init(provider);
+        test_encrypt_decrypt(cipher).await;
+
+        let provider: SimpleKeyProvider<Aes128GcmSiv> = SimpleKeyProvider::init([1; 16]);
+        let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
+        let cipher: EnvelopeCipher<Aes128GcmSiv, _> = EnvelopeCipher::init(provider);
+        test_encrypt_decrypt(cipher).await;
+    }
+
+    #[tokio::test]
+    async fn test_encrypt_decrypt_256_gcm_siv() {
+        let provider: SimpleKeyProvider<Aes256GcmSiv> = SimpleKeyProvider::init([1; 16]);
+        let cipher: EnvelopeCipher<Aes256GcmSiv, _> = EnvelopeCipher::init(provider);
+        test_encrypt_decrypt(cipher).await;
+
+        let provider: SimpleKeyProvider<Aes256GcmSiv> = SimpleKeyProvider::init([1; 16]);
+        let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
+        let cipher: EnvelopeCipher<Aes256GcmSiv, _> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
     }
 

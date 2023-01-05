@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
 use async_trait::async_trait;
 use aws_config::RetryConfig;
 use aws_sdk_kms::model::DataKeySpec;
@@ -133,6 +134,8 @@ macro_rules! define_kms_key_provider_impl {
 
 define_kms_key_provider_impl!(Aes128Gcm, DataKeySpec::Aes128);
 define_kms_key_provider_impl!(Aes256Gcm, DataKeySpec::Aes256);
+define_kms_key_provider_impl!(Aes128GcmSiv, DataKeySpec::Aes128);
+define_kms_key_provider_impl!(Aes256GcmSiv, DataKeySpec::Aes256);
 
 #[cfg(test)]
 mod tests {

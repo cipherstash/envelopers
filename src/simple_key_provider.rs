@@ -4,6 +4,7 @@ use aes_gcm::aead::{Aead, Payload};
 use aes_gcm::aes::cipher::consts::U16;
 use aes_gcm::aes::Aes128;
 use aes_gcm::{Aes128Gcm, Aes256Gcm, AesGcm, Key, KeyInit, KeySizeUser};
+use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
 use async_trait::async_trait;
 use rand_chacha::ChaChaRng;
 use std::marker::PhantomData;
@@ -147,10 +148,13 @@ macro_rules! define_simple_key_provider_impl {
 
 define_simple_key_provider_impl!(Aes128Gcm);
 define_simple_key_provider_impl!(Aes256Gcm);
+define_simple_key_provider_impl!(Aes128GcmSiv);
+define_simple_key_provider_impl!(Aes256GcmSiv);
 
 #[cfg(test)]
 mod tests {
     use aes_gcm::{Aes128Gcm, Aes256Gcm, KeySizeUser};
+    use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
 
     use super::{EncryptedSimpleKey, Nonce};
     use crate::{KeyProvider, SimpleKeyProvider};
@@ -188,6 +192,26 @@ mod tests {
         test_generate_decrypt_data_key(provider).await;
 
         let provider: SimpleKeyProvider<Aes256Gcm> = create_provider();
+        let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
+        test_generate_decrypt_data_key(provider).await;
+    }
+
+    #[tokio::test]
+    async fn test_generate_decrypt_data_key_128_gcm_siv() {
+        let provider: SimpleKeyProvider<Aes128GcmSiv> = create_provider();
+        test_generate_decrypt_data_key(provider).await;
+
+        let provider: SimpleKeyProvider<Aes128GcmSiv> = create_provider();
+        let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
+        test_generate_decrypt_data_key(provider).await;
+    }
+
+    #[tokio::test]
+    async fn test_generate_decrypt_data_key_256_gcm_siv() {
+        let provider: SimpleKeyProvider<Aes256GcmSiv> = create_provider();
+        test_generate_decrypt_data_key(provider).await;
+
+        let provider: SimpleKeyProvider<Aes256GcmSiv> = create_provider();
         let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
         test_generate_decrypt_data_key(provider).await;
     }
