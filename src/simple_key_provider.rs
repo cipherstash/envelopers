@@ -69,17 +69,18 @@ impl<'a> EncryptedSimpleKey<'a> {
     }
 }
 
-#[derive(Debug)]
 pub struct SimpleKeyProvider<S: KeySizeUser, R: SafeRng = ChaChaRng> {
-    kek: [u8; 16],
+    cipher: AesGcm<Aes128, U16>,
     rng: Mutex<R>,
     phantom_data: PhantomData<S>,
 }
 
 impl<S: KeySizeUser, R: SafeRng> SimpleKeyProvider<S, R> {
     pub fn init(kek: [u8; 16]) -> Self {
+        let key: &Key<Aes128> = Key::<Aes128>::from_slice(&kek);
+
         Self {
-            kek,
+            cipher: AesGcm::<Aes128, U16>::new(key),
             rng: Mutex::new(R::from_entropy()),
             phantom_data: PhantomData,
         }
@@ -94,11 +95,9 @@ macro_rules! define_simple_key_provider_impl {
                 &self,
                 encrypted_key: &[u8],
             ) -> Result<Key<$name>, KeyDecryptionError> {
-                let key = Key::<Aes128>::from_slice(&self.kek);
-                let cipher = AesGcm::<Aes128, U16>::new(key);
                 let decoded_key = EncryptedSimpleKey::from_slice(encrypted_key)?;
 
-                let data_key = cipher.decrypt(
+                let data_key = self.cipher.decrypt(
                     decoded_key.nonce,
                     Payload {
                         msg: decoded_key.key,
@@ -113,9 +112,6 @@ macro_rules! define_simple_key_provider_impl {
                 &self,
                 _bytes: usize,
             ) -> Result<DataKey<$name>, KeyGenerationError> {
-                let key = Key::<Aes128>::from_slice(&self.kek);
-                let cipher = AesGcm::<Aes128, U16>::new(key);
-
                 let version = 1;
                 let mut data_key: Key<$name> = Default::default();
                 let mut nonce: Nonce = Default::default();
@@ -131,7 +127,7 @@ macro_rules! define_simple_key_provider_impl {
                     aad: &[version],
                 };
 
-                let ciphertext = cipher.encrypt(&nonce, payload)?;
+                let ciphertext = self.cipher.encrypt(&nonce, payload)?;
 
                 let encrypted_key = EncryptedSimpleKey {
                     version,
@@ -154,12 +150,15 @@ define_simple_key_provider_impl!(Aes256Gcm);
 
 #[cfg(test)]
 mod tests {
-    use aes_gcm::{Aes128Gcm, KeySizeUser, Aes256Gcm};
+    use aes_gcm::{Aes128Gcm, Aes256Gcm, KeySizeUser};
 
     use super::{EncryptedSimpleKey, Nonce};
     use crate::{KeyProvider, SimpleKeyProvider};
 
-    fn create_provider<S: KeySizeUser>() -> SimpleKeyProvider<S> where SimpleKeyProvider<S>: KeyProvider<S> {
+    fn create_provider<S: KeySizeUser>() -> SimpleKeyProvider<S>
+    where
+        SimpleKeyProvider<S>: KeyProvider<S>,
+    {
         SimpleKeyProvider::init([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
     }
 
