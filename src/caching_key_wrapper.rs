@@ -84,7 +84,10 @@ pub struct CachingKeyWrapper<S: KeySizeUser, K> {
     provider: K,
 }
 
-impl<S: KeySizeUser + Clone, K> CachingKeyWrapper<S, K> {
+impl<S: KeySizeUser + Clone, K> CachingKeyWrapper<S, K>
+where
+    Key<S>: Copy,
+{
     /// Create a new CachingKeyWrapper from a certain key provider and caching options
     pub fn new(provider: K, options: CacheOptions) -> Self {
         Self {
@@ -147,7 +150,7 @@ impl<S: KeySizeUser + Clone, K> CachingKeyWrapper<S, K> {
             // Only return the cached key if the age is less than the max_age param.
             // I don't think this is strictly necessary, but it's what the JS AWS SDK does.
             if cached_key.created_at.elapsed() <= self.options.max_age {
-                return Some(cached_key.key.clone());
+                return Some(cached_key.key);
             }
         }
 
@@ -180,7 +183,7 @@ impl<S: KeySizeUser + Clone, K> CachingKeyWrapper<S, K> {
         decryption_cache.put(
             key.encrypted_key.clone(),
             CachedDecryptionEntry {
-                key: key.key.clone(),
+                key: key.key,
                 created_at: Instant::now(),
             },
         );
@@ -199,7 +202,10 @@ impl<S: KeySizeUser + Clone, K> CachingKeyWrapper<S, K> {
 }
 
 #[async_trait]
-impl<S: KeySizeUser + Clone, K: KeyProvider<S>> KeyProvider<S> for CachingKeyWrapper<S, K> {
+impl<S: KeySizeUser + Clone, K: KeyProvider<S>> KeyProvider<S> for CachingKeyWrapper<S, K>
+where
+    Key<S>: Copy,
+{
     async fn generate_data_key(&self, bytes: usize) -> Result<DataKey<S>, KeyGenerationError> {
         if let Some(cached_key) = self.get_and_increment_cached_encryption_key(bytes).await {
             return Ok(cached_key);
@@ -219,7 +225,7 @@ impl<S: KeySizeUser + Clone, K: KeyProvider<S>> KeyProvider<S> for CachingKeyWra
 
         let plaintext_key = self.provider.decrypt_data_key(encrypted_key).await?;
 
-        self.cache_decryption_key(encrypted_key, plaintext_key.clone())
+        self.cache_decryption_key(encrypted_key, plaintext_key)
             .await;
 
         Ok(plaintext_key)
