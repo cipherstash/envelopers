@@ -95,30 +95,27 @@ mod kms_key_provider;
 #[cfg(feature = "cache")]
 mod caching_key_wrapper;
 
-use std::marker::PhantomData;
-
 pub use crate::key_provider::{DataKey, KeyProvider};
+pub use crate::simple_key_provider::SimpleKeyProvider;
 
 #[cfg(feature = "cache")]
 pub use crate::caching_key_wrapper::{CacheOptions, CachingKeyWrapper};
-pub use crate::simple_key_provider::SimpleKeyProvider;
 
 #[cfg(feature = "aws-kms")]
 pub use crate::kms_key_provider::KMSKeyProvider;
 
-pub use aes_gcm::aes::cipher::consts::U16;
 pub use aes_gcm::{Aes128Gcm, Aes256Gcm, Key};
+
+pub use errors::{DecryptionError, EncryptionError, KeyDecryptionError, KeyGenerationError};
 
 use aes_gcm::aead::{Aead, Payload};
 use aes_gcm::{KeyInit, KeySizeUser, Nonce};
-// Or `Aes256Gcm`
 use async_mutex::Mutex as AsyncMutex;
 use rand_chacha::ChaChaRng;
 use safe_rng::SafeRng;
 use serde::{Deserialize, Serialize};
 use static_assertions::assert_impl_all;
-
-pub use errors::{DecryptionError, EncryptionError, KeyDecryptionError, KeyGenerationError};
+use std::marker::PhantomData;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EncryptedRecord {
@@ -178,12 +175,10 @@ impl<S: KeyInit + KeySizeUser + Aead, K: KeyProvider<S>, R: SafeRng> EnvelopeCip
     }
 
     pub async fn encrypt(&self, msg: &[u8]) -> Result<EncryptedRecord, EncryptionError> {
-        let mut nonce_data = [0u8; 12];
-
         let data_key = self.provider.generate_data_key(msg.len()).await?;
-
         let key_id = data_key.key_id.clone();
 
+        let mut nonce_data = [0u8; 12];
         {
             let mut rng = self.rng.lock().await;
             rng.try_fill_bytes(&mut nonce_data)?;
@@ -197,8 +192,8 @@ impl<S: KeyInit + KeySizeUser + Aead, K: KeyProvider<S>, R: SafeRng> EnvelopeCip
         let nonce = Nonce::from_slice(&nonce_data);
 
         // TODO: Use Zeroize for the drop
-        // let key = Key::from_slice(&data_key.key);
-        let cipher = Aes128Gcm::new_from_slice(&data_key.key).unwrap();
+        let key = Key::<S>::from_slice(&data_key.key);
+        let cipher = S::new(key);
         let ciphertext = cipher.encrypt(nonce, payload)?;
 
         Ok(EncryptedRecord {
@@ -225,15 +220,13 @@ assert_impl_all!(EnvelopeCipher<Aes128Gcm, CachingKeyWrapper<Aes128Gcm, KMSKeyPr
 
 #[cfg(test)]
 mod tests {
-    use aes_gcm::Aes128Gcm;
+    use aes_gcm::{aead::Aead, Aes128Gcm, Aes256Gcm, KeyInit, KeySizeUser};
 
     use crate::{CacheOptions, CachingKeyWrapper, EnvelopeCipher, KeyProvider, SimpleKeyProvider};
 
-    #[tokio::test]
-    async fn test_encrypt_decrypt() {
-        let provider: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([1; 16]);
-        let cipher: EnvelopeCipher<Aes128Gcm, _> = EnvelopeCipher::init(provider);
-
+    async fn test_encrypt_decrypt<S: KeyInit + KeySizeUser + Aead, K: KeyProvider<S>>(
+        cipher: EnvelopeCipher<S, K>,
+    ) {
         let message = "hello".as_bytes();
 
         let record = cipher.encrypt(message).await.unwrap();
@@ -243,31 +236,34 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_encrypt_decrypt_boxed() {
+    async fn test_encrypt_decrypt_128_gcm() {
         let provider: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([1; 16]);
-        let cipher: EnvelopeCipher<Aes128Gcm, Box<dyn KeyProvider<_>>> =
-            EnvelopeCipher::init(Box::new(provider));
+        let cipher: EnvelopeCipher<Aes128Gcm, _> = EnvelopeCipher::init(provider);
+        test_encrypt_decrypt(cipher).await;
 
-        let message = "hello".as_bytes();
+        let provider: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([1; 16]);
+        let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
+        let cipher: EnvelopeCipher<Aes128Gcm, _> = EnvelopeCipher::init(provider);
+        test_encrypt_decrypt(cipher).await;
+    }
 
-        let record = cipher.encrypt(message).await.unwrap();
-        let decrypted = cipher.decrypt(&record).await.unwrap();
+    #[tokio::test]
+    async fn test_encrypt_decrypt_256_gcm() {
+        let provider: SimpleKeyProvider<Aes256Gcm> = SimpleKeyProvider::init([1; 16]);
+        let cipher: EnvelopeCipher<Aes256Gcm, _> = EnvelopeCipher::init(provider);
+        test_encrypt_decrypt(cipher).await;
 
-        assert_eq!(String::from_utf8(decrypted).unwrap(), "hello");
+        let provider: SimpleKeyProvider<Aes256Gcm> = SimpleKeyProvider::init([1; 16]);
+        let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
+        let cipher: EnvelopeCipher<Aes256Gcm, _> = EnvelopeCipher::init(provider);
+        test_encrypt_decrypt(cipher).await;
     }
 
     #[tokio::test]
     async fn test_encrypt_decrypt_cache() {
-        let provider = SimpleKeyProvider::<Aes128Gcm>::init([1; 16]);
+        let provider: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::<Aes128Gcm>::init([1; 16]);
         let provider = CachingKeyWrapper::new(provider, CacheOptions::default());
-
         let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
-
-        let message = "hello".as_bytes();
-
-        let record = cipher.encrypt(message).await.unwrap();
-        let decrypted = cipher.decrypt(&record).await.unwrap();
-
-        assert_eq!(String::from_utf8(decrypted).unwrap(), "hello");
+        test_encrypt_decrypt(cipher).await;
     }
 }
