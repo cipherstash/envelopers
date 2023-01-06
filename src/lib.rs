@@ -134,13 +134,17 @@ impl EncryptedRecord {
     }
 }
 
-pub struct EnvelopeCipher<K, S = Aes128Gcm, R: SafeRng = ChaChaRng> {
+pub struct EnvelopeCipher<
+    K: KeyProvider<S>,
+    S: KeyInit + KeySizeUser + Aead = Aes128Gcm,
+    R: SafeRng = ChaChaRng,
+> {
     aes: PhantomData<S>,
     pub provider: K,
     pub rng: AsyncMutex<R>,
 }
 
-impl<K, S, R: SafeRng> EnvelopeCipher<K, S, R> {
+impl<K: KeyProvider<S>, S: KeyInit + KeySizeUser + Aead, R: SafeRng> EnvelopeCipher<K, S, R> {
     pub fn init(provider: K) -> Self {
         Self {
             aes: PhantomData,
@@ -205,17 +209,17 @@ impl<K: KeyProvider<S>, S: KeyInit + KeySizeUser + Aead, R: SafeRng> EnvelopeCip
 }
 
 // Ensure that all supported EnvelopeCiphers can be shared between threads
-assert_impl_all!(EnvelopeCipher<Aes128Gcm, SimpleKeyProvider<Aes128Gcm>>: Send, Sync);
-assert_impl_all!(EnvelopeCipher<Aes128Gcm, Box<dyn KeyProvider<Aes128Gcm>>>: Send, Sync);
+assert_impl_all!(EnvelopeCipher<SimpleKeyProvider<Aes128Gcm>>: Send, Sync);
+assert_impl_all!(EnvelopeCipher<Box<dyn KeyProvider<Aes128Gcm>>>: Send, Sync);
 
 #[cfg(feature = "aws-kms")]
-assert_impl_all!(EnvelopeCipher<Aes128Gcm, KMSKeyProvider<Aes128Gcm>>: Send, Sync);
+assert_impl_all!(EnvelopeCipher<KMSKeyProvider<Aes128Gcm>>: Send, Sync);
 
 #[cfg(feature = "cache")]
-assert_impl_all!(EnvelopeCipher<Aes128Gcm, CachingKeyWrapper<Aes128Gcm, SimpleKeyProvider<Aes128Gcm>>>: Send, Sync);
+assert_impl_all!(EnvelopeCipher<CachingKeyWrapper<Aes128Gcm, SimpleKeyProvider<Aes128Gcm>>>: Send, Sync);
 
 #[cfg(all(feature = "cache", feature = "aws-kms"))]
-assert_impl_all!(EnvelopeCipher<Aes128Gcm, CachingKeyWrapper<Aes128Gcm, KMSKeyProvider<Aes128Gcm>>>: Send, Sync);
+assert_impl_all!(EnvelopeCipher<CachingKeyWrapper<Aes128Gcm, KMSKeyProvider<Aes128Gcm>>>: Send, Sync);
 
 #[cfg(test)]
 mod tests {
