@@ -12,7 +12,7 @@ use crate::key_provider::{DataKey, KeyProvider};
 
 use aes_gcm::{Aes128Gcm, Aes256Gcm, Key, KeySizeUser};
 
-pub struct KMSKeyProvider<S: KeySizeUser> {
+pub struct KMSKeyProvider<S: KeySizeUser = Aes128Gcm> {
     key_id: String,
     client: Client,
     phantom_data: PhantomData<S>,

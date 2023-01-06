@@ -70,7 +70,7 @@ impl<'a> EncryptedSimpleKey<'a> {
     }
 }
 
-pub struct SimpleKeyProvider<S: KeySizeUser, R: SafeRng = ChaChaRng> {
+pub struct SimpleKeyProvider<S: KeySizeUser = Aes128Gcm, R: SafeRng = ChaChaRng> {
     cipher: AesGcm<Aes128, U16>,
     rng: Mutex<R>,
     phantom_data: PhantomData<S>,

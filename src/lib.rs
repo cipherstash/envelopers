@@ -13,7 +13,11 @@
 //! The `SimpleKeyProvider` allows envelope encryption to be used with a local key.
 //!
 //! ```rust
-//! use envelopers::{Aes128Gcm, EnvelopeCipher, SimpleKeyProvider};
+//! use envelopers::{
+//!     Aes128Gcm, // or Aes256Gcm, Aes128GcmSiv, Aes256GcmSiv
+//!     EnvelopeCipher,
+//!     SimpleKeyProvider,
+//! };
 //!
 //! # use tokio::runtime::Runtime;
 //! # let rt = Runtime::new().unwrap();
@@ -23,9 +27,7 @@
 //! let kek: [u8; 16] = hex!("00010203 04050607 08090a0b 0c0d0e0f");
 //! let key_provider = SimpleKeyProvider::<Aes128Gcm>::init(kek);
 //!
-//! let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(
-//!     key_provider,
-//! );
+//! let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(key_provider);
 //! let er = cipher.encrypt(b"hey there monkey boy").await.unwrap();
 //! #
 //! # });
@@ -44,9 +46,7 @@
 //! # let kek: [u8; 16] = hex!("00010203 04050607 08090a0b 0c0d0e0f");
 //! # let key_provider = SimpleKeyProvider::<Aes128Gcm>::init(kek);
 //! #
-//! # let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(
-//! #   key_provider,
-//! # );
+//! # let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(key_provider);
 //! #
 //! # let er = cipher.encrypt(b"hey there monkey boy").await.unwrap();
 //! #
@@ -68,9 +68,7 @@
 //! # let kek: [u8; 16] = hex!("00010203 04050607 08090a0b 0c0d0e0f");
 //! # let key_provider = SimpleKeyProvider::<Aes128Gcm>::init(kek);
 //! #
-//! # let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(
-//! #    key_provider,
-//! # );
+//! # let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(key_provider);
 //! # let er = cipher.encrypt(b"hey there monkey boy").await.unwrap();
 //! # let bytes = er.to_vec().unwrap();
 //! # hex::encode(&bytes);
@@ -136,13 +134,13 @@ impl EncryptedRecord {
     }
 }
 
-pub struct EnvelopeCipher<S, K, R: SafeRng = ChaChaRng> {
+pub struct EnvelopeCipher<K, S = Aes128Gcm, R: SafeRng = ChaChaRng> {
     aes: PhantomData<S>,
     pub provider: K,
     pub rng: AsyncMutex<R>,
 }
 
-impl<S, K, R: SafeRng> EnvelopeCipher<S, K, R> {
+impl<K, S, R: SafeRng> EnvelopeCipher<K, S, R> {
     pub fn init(provider: K) -> Self {
         Self {
             aes: PhantomData,
@@ -152,7 +150,7 @@ impl<S, K, R: SafeRng> EnvelopeCipher<S, K, R> {
     }
 }
 
-impl<S: KeyInit + KeySizeUser + Aead, K: KeyProvider<S>, R: SafeRng> EnvelopeCipher<S, K, R> {
+impl<K: KeyProvider<S>, S: KeyInit + KeySizeUser + Aead, R: SafeRng> EnvelopeCipher<K, S, R> {
     pub async fn decrypt(
         &self,
         encrypted_record: &EncryptedRecord,
@@ -226,8 +224,8 @@ mod tests {
 
     use crate::{CacheOptions, CachingKeyWrapper, EnvelopeCipher, KeyProvider, SimpleKeyProvider};
 
-    async fn test_encrypt_decrypt<S: KeyInit + KeySizeUser + Aead, K: KeyProvider<S>>(
-        cipher: EnvelopeCipher<S, K>,
+    async fn test_encrypt_decrypt<K: KeyProvider<S>, S: KeyInit + KeySizeUser + Aead>(
+        cipher: EnvelopeCipher<K, S>,
     ) {
         let message = "hello".as_bytes();
 
@@ -239,55 +237,55 @@ mod tests {
 
     #[tokio::test]
     async fn test_encrypt_decrypt_128_gcm() {
-        let provider: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([1; 16]);
-        let cipher: EnvelopeCipher<Aes128Gcm, _> = EnvelopeCipher::init(provider);
+        let provider: SimpleKeyProvider = SimpleKeyProvider::init([1; 16]);
+        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
 
         let provider: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([1; 16]);
         let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
-        let cipher: EnvelopeCipher<Aes128Gcm, _> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
     }
 
     #[tokio::test]
     async fn test_encrypt_decrypt_256_gcm() {
         let provider: SimpleKeyProvider<Aes256Gcm> = SimpleKeyProvider::init([1; 16]);
-        let cipher: EnvelopeCipher<Aes256Gcm, _> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
 
         let provider: SimpleKeyProvider<Aes256Gcm> = SimpleKeyProvider::init([1; 16]);
         let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
-        let cipher: EnvelopeCipher<Aes256Gcm, _> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
     }
 
     #[tokio::test]
     async fn test_encrypt_decrypt_128_gcm_siv() {
         let provider: SimpleKeyProvider<Aes128GcmSiv> = SimpleKeyProvider::init([1; 16]);
-        let cipher: EnvelopeCipher<Aes128GcmSiv, _> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
 
         let provider: SimpleKeyProvider<Aes128GcmSiv> = SimpleKeyProvider::init([1; 16]);
         let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
-        let cipher: EnvelopeCipher<Aes128GcmSiv, _> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
     }
 
     #[tokio::test]
     async fn test_encrypt_decrypt_256_gcm_siv() {
         let provider: SimpleKeyProvider<Aes256GcmSiv> = SimpleKeyProvider::init([1; 16]);
-        let cipher: EnvelopeCipher<Aes256GcmSiv, _> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
 
         let provider: SimpleKeyProvider<Aes256GcmSiv> = SimpleKeyProvider::init([1; 16]);
         let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
-        let cipher: EnvelopeCipher<Aes256GcmSiv, _> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
     }
 
     #[tokio::test]
     async fn test_encrypt_decrypt_cache() {
-        let provider: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::<Aes128Gcm>::init([1; 16]);
+        let provider: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([1; 16]);
         let provider = CachingKeyWrapper::new(provider, CacheOptions::default());
         let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
