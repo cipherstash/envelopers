@@ -93,6 +93,10 @@ mod kms_key_provider;
 #[cfg(feature = "cache")]
 mod caching_key_wrapper;
 
+pub use aes_gcm::{Aes128Gcm, Aes256Gcm, Key, KeySizeUser};
+pub use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
+
+pub use crate::errors::{DecryptionError, EncryptionError, KeyDecryptionError, KeyGenerationError};
 pub use crate::key_provider::{DataKey, KeyProvider};
 pub use crate::simple_key_provider::SimpleKeyProvider;
 
@@ -102,18 +106,14 @@ pub use crate::caching_key_wrapper::{CacheOptions, CachingKeyWrapper};
 #[cfg(feature = "aws-kms")]
 pub use crate::kms_key_provider::KMSKeyProvider;
 
-pub use aes_gcm::{Aes128Gcm, Aes256Gcm, Key};
-pub use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
-
-pub use errors::{DecryptionError, EncryptionError, KeyDecryptionError, KeyGenerationError};
-
 use aes_gcm::aead::{Aead, Payload};
 use aes_gcm::{KeyInit, Nonce};
 use async_mutex::Mutex as AsyncMutex;
 use rand_chacha::ChaChaRng;
-use safe_rng::SafeRng;
 use serde::{Deserialize, Serialize};
 use static_assertions::assert_impl_all;
+
+use crate::safe_rng::SafeRng;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EncryptedRecord {

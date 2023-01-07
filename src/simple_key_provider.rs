@@ -1,5 +1,8 @@
 //! Trait for a KeyProvider
 
+use std::marker::PhantomData;
+use std::sync::Mutex;
+
 use aes_gcm::aead::{Aead, Payload};
 use aes_gcm::aes::cipher::consts::U16;
 use aes_gcm::aes::Aes128;
@@ -7,8 +10,6 @@ use aes_gcm::{Aes128Gcm, Aes256Gcm, AesGcm, Key, KeyInit, KeySizeUser};
 use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
 use async_trait::async_trait;
 use rand_chacha::ChaChaRng;
-use std::marker::PhantomData;
-use std::sync::Mutex;
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
 use crate::key_provider::{DataKey, KeyProvider};

@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use aes_gcm::{Aes128Gcm, Aes256Gcm, Key, KeySizeUser};
 use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
 use async_trait::async_trait;
 use aws_config::RetryConfig;
@@ -9,8 +10,6 @@ use aws_sdk_kms::{Client, Config, Credentials, Region};
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
 use crate::key_provider::{DataKey, KeyProvider};
-
-use aes_gcm::{Aes128Gcm, Aes256Gcm, Key, KeySizeUser};
 
 pub struct KMSKeyProvider<S: KeySizeUser = Aes128Gcm> {
     key_id: String,

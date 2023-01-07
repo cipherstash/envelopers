@@ -1,9 +1,6 @@
 //! Trait for a KeyProvider
 
-use aes_gcm::aead::Aead;
-use aes_gcm::Key;
-use aes_gcm::KeyInit;
-use aes_gcm::KeySizeUser;
+use aes_gcm::{Key, KeySizeUser};
 use async_trait::async_trait;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -40,7 +37,7 @@ pub trait KeyProvider: Send + Sync {
 }
 
 #[async_trait]
-impl<S: KeyInit + KeySizeUser + Aead> KeyProvider for Box<dyn KeyProvider<Cipher = S>> {
+impl<S: KeySizeUser> KeyProvider for Box<dyn KeyProvider<Cipher = S>> {
     type Cipher = S;
 
     async fn generate_data_key(

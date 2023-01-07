@@ -1,9 +1,9 @@
-use aes_gcm::aead::Aead;
-use aes_gcm::{Key, KeyInit, KeySizeUser};
+use std::time::{Duration, Instant};
+
+use aes_gcm::{Key, KeySizeUser};
 use async_mutex::Mutex as AsyncMutex;
 use async_trait::async_trait;
 use lru::LruCache;
-use std::time::{Duration, Instant};
 use zeroize::ZeroizeOnDrop;
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
@@ -203,8 +203,7 @@ where
 }
 
 #[async_trait]
-impl<S: KeyInit + KeySizeUser + Aead + Clone, K: KeyProvider<Cipher = S>> KeyProvider
-    for CachingKeyWrapper<S, K>
+impl<S: KeySizeUser + Clone, K: KeyProvider<Cipher = S>> KeyProvider for CachingKeyWrapper<S, K>
 where
     Key<S>: Copy,
 {
