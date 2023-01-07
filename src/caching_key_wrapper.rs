@@ -1,4 +1,5 @@
-use aes_gcm::{Key, KeySizeUser};
+use aes_gcm::aead::Aead;
+use aes_gcm::{Key, KeyInit, KeySizeUser};
 use async_mutex::Mutex as AsyncMutex;
 use async_trait::async_trait;
 use lru::LruCache;
@@ -202,10 +203,13 @@ where
 }
 
 #[async_trait]
-impl<S: KeySizeUser + Clone, K: KeyProvider<S>> KeyProvider<S> for CachingKeyWrapper<S, K>
+impl<S: KeyInit + KeySizeUser + Aead + Clone, K: KeyProvider<Cipher = S>> KeyProvider
+    for CachingKeyWrapper<S, K>
 where
     Key<S>: Copy,
 {
+    type Cipher = S;
+
     async fn generate_data_key(&self, bytes: usize) -> Result<DataKey<S>, KeyGenerationError> {
         if let Some(cached_key) = self.get_and_increment_cached_encryption_key(bytes).await {
             return Ok(cached_key);
@@ -291,7 +295,9 @@ mod tests {
     }
 
     #[async_trait]
-    impl KeyProvider<Aes128Gcm> for TestKeyProvider {
+    impl KeyProvider for TestKeyProvider {
+        type Cipher = Aes128Gcm;
+
         async fn decrypt_data_key(
             &self,
             encrypted_key: &[u8],

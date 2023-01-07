@@ -91,7 +91,9 @@ impl<S: KeySizeUser, R: SafeRng> SimpleKeyProvider<S, R> {
 macro_rules! define_simple_key_provider_impl {
     ($name:ty) => {
         #[async_trait]
-        impl<R: SafeRng> KeyProvider<$name> for SimpleKeyProvider<$name, R> {
+        impl<R: SafeRng> KeyProvider for SimpleKeyProvider<$name, R> {
+            type Cipher = $name;
+
             async fn decrypt_data_key(
                 &self,
                 encrypted_key: &[u8],
@@ -161,12 +163,14 @@ mod tests {
 
     fn create_provider<S: KeySizeUser>() -> SimpleKeyProvider<S>
     where
-        SimpleKeyProvider<S>: KeyProvider<S>,
+        SimpleKeyProvider<S>: KeyProvider<Cipher = S>,
     {
         SimpleKeyProvider::init([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
     }
 
-    async fn test_generate_decrypt_data_key<S: KeySizeUser, K: KeyProvider<S>>(provider: K) {
+    async fn test_generate_decrypt_data_key<S: KeySizeUser, K: KeyProvider<Cipher = S>>(
+        provider: K,
+    ) {
         let data_key = provider.generate_data_key(0).await.unwrap();
         let decrypted_data_key = provider
             .decrypt_data_key(&data_key.encrypted_key)
@@ -182,7 +186,7 @@ mod tests {
         test_generate_decrypt_data_key(provider).await;
 
         let provider: SimpleKeyProvider<Aes128Gcm> = create_provider();
-        let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
+        let provider: Box<dyn KeyProvider<Cipher = Aes128Gcm>> = Box::new(provider);
         test_generate_decrypt_data_key(provider).await;
     }
 
@@ -192,7 +196,7 @@ mod tests {
         test_generate_decrypt_data_key(provider).await;
 
         let provider: SimpleKeyProvider<Aes256Gcm> = create_provider();
-        let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
+        let provider: Box<dyn KeyProvider<Cipher = Aes256Gcm>> = Box::new(provider);
         test_generate_decrypt_data_key(provider).await;
     }
 
@@ -202,7 +206,7 @@ mod tests {
         test_generate_decrypt_data_key(provider).await;
 
         let provider: SimpleKeyProvider<Aes128GcmSiv> = create_provider();
-        let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
+        let provider: Box<dyn KeyProvider<Cipher = Aes128GcmSiv>> = Box::new(provider);
         test_generate_decrypt_data_key(provider).await;
     }
 
@@ -212,7 +216,7 @@ mod tests {
         test_generate_decrypt_data_key(provider).await;
 
         let provider: SimpleKeyProvider<Aes256GcmSiv> = create_provider();
-        let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
+        let provider: Box<dyn KeyProvider<Cipher = Aes256GcmSiv>> = Box::new(provider);
         test_generate_decrypt_data_key(provider).await;
     }
 

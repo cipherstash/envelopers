@@ -60,7 +60,9 @@ impl<S: KeySizeUser> KMSKeyProvider<S> {
 macro_rules! define_kms_key_provider_impl {
     ($name:ty, $data_key_spec:expr) => {
         #[async_trait]
-        impl KeyProvider<$name> for KMSKeyProvider<$name> {
+        impl KeyProvider for KMSKeyProvider<$name> {
+            type Cipher = $name;
+
             async fn generate_data_key(
                 &self,
                 _bytes_to_encrypt: usize,
