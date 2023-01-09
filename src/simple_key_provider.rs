@@ -1,13 +1,15 @@
 //! Trait for a KeyProvider
 
+use std::marker::PhantomData;
+use std::sync::Mutex;
+
 use aes_gcm::aead::{Aead, Payload};
 use aes_gcm::aes::cipher::consts::U16;
 use aes_gcm::aes::Aes128;
 use aes_gcm::{Aes128Gcm, Aes256Gcm, AesGcm, Key, KeyInit, KeySizeUser};
+use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
 use async_trait::async_trait;
 use rand_chacha::ChaChaRng;
-use std::marker::PhantomData;
-use std::sync::Mutex;
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
 use crate::key_provider::{DataKey, KeyProvider};
@@ -69,7 +71,7 @@ impl<'a> EncryptedSimpleKey<'a> {
     }
 }
 
-pub struct SimpleKeyProvider<S: KeySizeUser, R: SafeRng = ChaChaRng> {
+pub struct SimpleKeyProvider<S: KeySizeUser = Aes128Gcm, R: SafeRng = ChaChaRng> {
     cipher: AesGcm<Aes128, U16>,
     rng: Mutex<R>,
     phantom_data: PhantomData<S>,
@@ -90,7 +92,9 @@ impl<S: KeySizeUser, R: SafeRng> SimpleKeyProvider<S, R> {
 macro_rules! define_simple_key_provider_impl {
     ($name:ty) => {
         #[async_trait]
-        impl<R: SafeRng> KeyProvider<$name> for SimpleKeyProvider<$name, R> {
+        impl<R: SafeRng> KeyProvider for SimpleKeyProvider<$name, R> {
+            type Cipher = $name;
+
             async fn decrypt_data_key(
                 &self,
                 encrypted_key: &[u8],
@@ -147,22 +151,27 @@ macro_rules! define_simple_key_provider_impl {
 
 define_simple_key_provider_impl!(Aes128Gcm);
 define_simple_key_provider_impl!(Aes256Gcm);
+define_simple_key_provider_impl!(Aes128GcmSiv);
+define_simple_key_provider_impl!(Aes256GcmSiv);
 
 #[cfg(test)]
 mod tests {
     use aes_gcm::{Aes128Gcm, Aes256Gcm, KeySizeUser};
+    use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
 
     use super::{EncryptedSimpleKey, Nonce};
     use crate::{KeyProvider, SimpleKeyProvider};
 
     fn create_provider<S: KeySizeUser>() -> SimpleKeyProvider<S>
     where
-        SimpleKeyProvider<S>: KeyProvider<S>,
+        SimpleKeyProvider<S>: KeyProvider<Cipher = S>,
     {
         SimpleKeyProvider::init([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
     }
 
-    async fn test_generate_decrypt_data_key<S: KeySizeUser, K: KeyProvider<S>>(provider: K) {
+    async fn test_generate_decrypt_data_key<S: KeySizeUser, K: KeyProvider<Cipher = S>>(
+        provider: K,
+    ) {
         let data_key = provider.generate_data_key(0).await.unwrap();
         let decrypted_data_key = provider
             .decrypt_data_key(&data_key.encrypted_key)
@@ -178,7 +187,7 @@ mod tests {
         test_generate_decrypt_data_key(provider).await;
 
         let provider: SimpleKeyProvider<Aes128Gcm> = create_provider();
-        let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
+        let provider: Box<dyn KeyProvider<Cipher = Aes128Gcm>> = Box::new(provider);
         test_generate_decrypt_data_key(provider).await;
     }
 
@@ -188,7 +197,27 @@ mod tests {
         test_generate_decrypt_data_key(provider).await;
 
         let provider: SimpleKeyProvider<Aes256Gcm> = create_provider();
-        let provider: Box<dyn KeyProvider<_>> = Box::new(provider);
+        let provider: Box<dyn KeyProvider<Cipher = Aes256Gcm>> = Box::new(provider);
+        test_generate_decrypt_data_key(provider).await;
+    }
+
+    #[tokio::test]
+    async fn test_generate_decrypt_data_key_128_gcm_siv() {
+        let provider: SimpleKeyProvider<Aes128GcmSiv> = create_provider();
+        test_generate_decrypt_data_key(provider).await;
+
+        let provider: SimpleKeyProvider<Aes128GcmSiv> = create_provider();
+        let provider: Box<dyn KeyProvider<Cipher = Aes128GcmSiv>> = Box::new(provider);
+        test_generate_decrypt_data_key(provider).await;
+    }
+
+    #[tokio::test]
+    async fn test_generate_decrypt_data_key_256_gcm_siv() {
+        let provider: SimpleKeyProvider<Aes256GcmSiv> = create_provider();
+        test_generate_decrypt_data_key(provider).await;
+
+        let provider: SimpleKeyProvider<Aes256GcmSiv> = create_provider();
+        let provider: Box<dyn KeyProvider<Cipher = Aes256GcmSiv>> = Box::new(provider);
         test_generate_decrypt_data_key(provider).await;
     }
 

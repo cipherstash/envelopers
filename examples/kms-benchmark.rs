@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .expect("Please export CS_KEY_ID environment variable with your AWS KMS key id."),
     );
 
-    let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(CachingKeyWrapper::new(
+    let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(CachingKeyWrapper::new(
         provider,
         CacheOptions::default()
             .with_max_age(Duration::from_secs(30))

@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let provider = KMSKeyProvider::<Aes128Gcm>::new(client, std::env::var("CS_KEY_ID")?);
 
-    let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(CachingKeyWrapper::new(
+    let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(CachingKeyWrapper::new(
         provider,
         CacheOptions::default()
             .with_max_age(Duration::from_secs(30))

@@ -1,5 +1,7 @@
 use std::marker::PhantomData;
 
+use aes_gcm::{Aes128Gcm, Aes256Gcm, Key, KeySizeUser};
+use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
 use async_trait::async_trait;
 use aws_config::RetryConfig;
 use aws_sdk_kms::model::DataKeySpec;
@@ -9,9 +11,7 @@ use aws_sdk_kms::{Client, Config, Credentials, Region};
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
 use crate::key_provider::{DataKey, KeyProvider};
 
-use aes_gcm::{Aes128Gcm, Aes256Gcm, Key, KeySizeUser};
-
-pub struct KMSKeyProvider<S: KeySizeUser> {
+pub struct KMSKeyProvider<S: KeySizeUser = Aes128Gcm> {
     key_id: String,
     client: Client,
     phantom_data: PhantomData<S>,
@@ -59,7 +59,9 @@ impl<S: KeySizeUser> KMSKeyProvider<S> {
 macro_rules! define_kms_key_provider_impl {
     ($name:ty, $data_key_spec:expr) => {
         #[async_trait]
-        impl KeyProvider<$name> for KMSKeyProvider<$name> {
+        impl KeyProvider for KMSKeyProvider<$name> {
+            type Cipher = $name;
+
             async fn generate_data_key(
                 &self,
                 _bytes_to_encrypt: usize,
@@ -133,6 +135,8 @@ macro_rules! define_kms_key_provider_impl {
 
 define_kms_key_provider_impl!(Aes128Gcm, DataKeySpec::Aes128);
 define_kms_key_provider_impl!(Aes256Gcm, DataKeySpec::Aes256);
+define_kms_key_provider_impl!(Aes128GcmSiv, DataKeySpec::Aes128);
+define_kms_key_provider_impl!(Aes256GcmSiv, DataKeySpec::Aes256);
 
 #[cfg(test)]
 mod tests {

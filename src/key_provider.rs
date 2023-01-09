@@ -1,7 +1,6 @@
 //! Trait for a KeyProvider
 
-use aes_gcm::Key;
-use aes_gcm::KeySizeUser;
+use aes_gcm::{Key, KeySizeUser};
 use async_trait::async_trait;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -16,7 +15,9 @@ pub struct DataKey<S: KeySizeUser> {
 }
 
 #[async_trait]
-pub trait KeyProvider<S: KeySizeUser>: Send + Sync {
+pub trait KeyProvider: Send + Sync {
+    type Cipher: KeySizeUser;
+
     /// Generate a [`DataKey`] to encrypt a specific number of bytes
     ///
     /// # Arguments
@@ -26,14 +27,19 @@ pub trait KeyProvider<S: KeySizeUser>: Send + Sync {
     async fn generate_data_key(
         &self,
         bytes_to_encrypt: usize,
-    ) -> Result<DataKey<S>, KeyGenerationError>;
+    ) -> Result<DataKey<Self::Cipher>, KeyGenerationError>;
 
     /// Decrypt an encrypted key and return the plaintext key
-    async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<S>, KeyDecryptionError>;
+    async fn decrypt_data_key(
+        &self,
+        encrypted_key: &[u8],
+    ) -> Result<Key<Self::Cipher>, KeyDecryptionError>;
 }
 
 #[async_trait]
-impl<S: KeySizeUser> KeyProvider<S> for Box<dyn KeyProvider<S>> {
+impl<S: KeySizeUser> KeyProvider for Box<dyn KeyProvider<Cipher = S>> {
+    type Cipher = S;
+
     async fn generate_data_key(
         &self,
         bytes_to_encrypt: usize,
