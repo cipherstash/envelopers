@@ -114,6 +114,7 @@ mod tests {
             .await
             .expect("Failed to decrypt keys");
 
+        assert_ne!(keys[0], keys[1]);
         assert_eq!(keys, decrypted_keys);
     }
 }
