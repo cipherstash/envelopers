@@ -27,7 +27,7 @@ pub trait KeyProvider: Send + Sync {
     ///
     /// # Arguments
     ///
-    /// * `bytes_to_encrypt` - The number of bytes that this key will be used to encrypt
+    /// * `spec` - [`GenerateKeySpec`] containing the number of bytes that this key will be used to encrypt
     ///
     async fn generate_data_key(
         &self,
@@ -40,6 +40,7 @@ pub trait KeyProvider: Send + Sync {
         encrypted_key: &[u8],
     ) -> Result<Key<Self::Cipher>, KeyDecryptionError>;
 
+    /// Generate multiple [`DataKey`] for a slice of [`GenerateKeySpec`]
     async fn generate_many_data_keys(
         &self,
         specs: &[GenerateKeySpec],
@@ -53,6 +54,7 @@ pub trait KeyProvider: Send + Sync {
         Ok(output)
     }
 
+    /// Decrypt multiple encrypted keys and return their plaintext keys
     async fn decrypt_many_data_keys(
         &self,
         encrypted_keys: &[Vec<u8>],
