@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use rand_chacha::ChaChaRng;
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
-use crate::key_provider::{DataKey, KeyProvider};
+use crate::key_provider::{DataKey, KeyProvider, GenerateKeySpec};
 use crate::safe_rng::SafeRng;
 
 // EncryptedSimpleKey relies on this size being constant. If this ever needs to be changed a new
@@ -114,7 +114,7 @@ macro_rules! define_simple_key_provider_impl {
 
             async fn generate_data_key(
                 &self,
-                _bytes: usize,
+                _spec: GenerateKeySpec,
             ) -> Result<DataKey<$name>, KeyGenerationError> {
                 let version = 1;
                 let mut data_key: Key<$name> = Default::default();
@@ -160,7 +160,7 @@ mod tests {
     use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
 
     use super::{EncryptedSimpleKey, Nonce};
-    use crate::{KeyProvider, SimpleKeyProvider};
+    use crate::{KeyProvider, SimpleKeyProvider, GenerateKeySpec};
 
     fn create_provider<S: KeySizeUser>() -> SimpleKeyProvider<S>
     where
@@ -172,7 +172,7 @@ mod tests {
     async fn test_generate_decrypt_data_key<S: KeySizeUser, K: KeyProvider<Cipher = S>>(
         provider: K,
     ) {
-        let data_key = provider.generate_data_key(0).await.unwrap();
+        let data_key = provider.generate_data_key(GenerateKeySpec { bytes_to_encrypt: 0 }).await.unwrap();
         let decrypted_data_key = provider
             .decrypt_data_key(&data_key.encrypted_key)
             .await
@@ -226,7 +226,7 @@ mod tests {
         let first: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([0; 16]);
         let second: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([1; 16]);
 
-        let data_key = first.generate_data_key(0).await.unwrap();
+        let data_key = first.generate_data_key(GenerateKeySpec { bytes_to_encrypt: 0 }).await.unwrap();
 
         assert_eq!(
             second
@@ -242,7 +242,7 @@ mod tests {
     async fn test_fails_on_invalid_nonce() {
         let provider: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([0; 16]);
 
-        let mut data_key = provider.generate_data_key(0).await.unwrap();
+        let mut data_key = provider.generate_data_key(GenerateKeySpec { bytes_to_encrypt: 0 }).await.unwrap();
 
         // Decrypts data key fine
         assert!(provider
@@ -268,7 +268,7 @@ mod tests {
     async fn test_fails_on_invalid_version() {
         let provider: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([0; 16]);
 
-        let mut data_key = provider.generate_data_key(0).await.unwrap();
+        let mut data_key = provider.generate_data_key(GenerateKeySpec { bytes_to_encrypt: 0 }).await.unwrap();
 
         // Decrypts data key fine
         assert!(provider

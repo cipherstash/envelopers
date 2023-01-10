@@ -97,7 +97,7 @@ pub use aes_gcm::{Aes128Gcm, Aes256Gcm, Key, KeySizeUser};
 pub use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
 
 pub use crate::errors::{DecryptionError, EncryptionError, KeyDecryptionError, KeyGenerationError};
-pub use crate::key_provider::{DataKey, KeyProvider};
+pub use crate::key_provider::{DataKey, GenerateKeySpec, KeyProvider};
 pub use crate::simple_key_provider::SimpleKeyProvider;
 
 #[cfg(feature = "cache")]
@@ -174,7 +174,12 @@ where
     }
 
     pub async fn encrypt(&self, msg: &[u8]) -> Result<EncryptedRecord, EncryptionError> {
-        let data_key = self.provider.generate_data_key(msg.len()).await?;
+        let data_key = self
+            .provider
+            .generate_data_key(GenerateKeySpec {
+                bytes_to_encrypt: msg.len(),
+            })
+            .await?;
         let key_id = data_key.key_id.clone();
 
         let mut nonce_data = [0u8; 12];

@@ -9,7 +9,7 @@ use aws_sdk_kms::types::Blob;
 use aws_sdk_kms::{Client, Config, Credentials, Region};
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
-use crate::key_provider::{DataKey, KeyProvider};
+use crate::key_provider::{DataKey, KeyProvider, GenerateKeySpec};
 
 pub struct KMSKeyProvider<S: KeySizeUser = Aes128Gcm> {
     key_id: String,
@@ -64,7 +64,7 @@ macro_rules! define_kms_key_provider_impl {
 
             async fn generate_data_key(
                 &self,
-                _bytes_to_encrypt: usize,
+                _spec: GenerateKeySpec,
             ) -> Result<DataKey<$name>, KeyGenerationError> {
                 let mut response = self
                     .client
@@ -149,7 +149,7 @@ mod tests {
     use core::future::Future;
     use http::{Request, Response, StatusCode};
 
-    use crate::{KMSKeyProvider, KeyProvider};
+    use crate::{KMSKeyProvider, KeyProvider, GenerateKeySpec};
 
     async fn with_mocked_response<C, F>(
         request_body: impl Into<String>,
@@ -211,7 +211,7 @@ mod tests {
                 let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
                 let key = provider
-                    .generate_data_key(0)
+                    .generate_data_key(GenerateKeySpec { bytes_to_encrypt: 0 })
                     .await
                     .expect("Failed to generate data key");
 
@@ -234,7 +234,7 @@ mod tests {
             |client| async move {
                 let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
-                let result = provider.generate_data_key(0).await;
+                let result = provider.generate_data_key(GenerateKeySpec { bytes_to_encrypt: 0 }).await;
 
                 match result {
                     Ok(_) => panic!("Expected result to be an error"),
@@ -261,7 +261,7 @@ mod tests {
             |client| async move {
                 let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
-                let result = provider.generate_data_key(0).await;
+                let result = provider.generate_data_key(GenerateKeySpec { bytes_to_encrypt: 0 }).await;
 
                 match result {
                     Ok(_) => panic!("Expected result to be an error"),
@@ -289,7 +289,7 @@ mod tests {
             |client| async move {
                 let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
-                let result = provider.generate_data_key(0).await;
+                let result = provider.generate_data_key(GenerateKeySpec { bytes_to_encrypt: 0 }).await;
 
                 match result {
                     Ok(_) => panic!("Expected result to be an error"),
@@ -311,7 +311,7 @@ mod tests {
             |client| async move {
                 let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
-                let result = provider.generate_data_key(0).await;
+                let result = provider.generate_data_key(GenerateKeySpec { bytes_to_encrypt: 0 }).await;
 
                 match result {
                     Ok(_) => panic!("Expected result to be an error"),
