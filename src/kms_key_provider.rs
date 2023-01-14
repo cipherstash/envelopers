@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use aes_gcm::{Aes128Gcm, Aes256Gcm, Key, KeySizeUser};
@@ -65,10 +66,13 @@ macro_rules! define_kms_key_provider_impl {
             async fn generate_data_key(
                 &self,
                 _bytes_to_encrypt: usize,
+                aad: Option<&str>,
             ) -> Result<DataKey<$name>, KeyGenerationError> {
-                let mut response = self
-                    .client
-                    .generate_data_key()
+                let mut generate_data_key = self.client.generate_data_key();
+                if let Some(a) = aad {
+                    generate_data_key = generate_data_key.encryption_context("aad", a);
+                }
+                let mut response = generate_data_key
                     .key_id(&self.key_id)
                     .key_spec($data_key_spec)
                     .send()
@@ -112,10 +116,13 @@ macro_rules! define_kms_key_provider_impl {
             async fn decrypt_data_key(
                 &self,
                 encrypted_key: &[u8],
+                aad: Option<&str>,
             ) -> Result<Key<$name>, KeyDecryptionError> {
-                let response = self
-                    .client
-                    .decrypt()
+                let mut decrypt = self.client.decrypt();
+                if let Some(a) = aad {
+                    decrypt = decrypt.encryption_context("aad", a);
+                }
+                let response = decrypt
                     .ciphertext_blob(Blob::new(encrypted_key.to_vec()))
                     .send()
                     .await
@@ -128,22 +135,6 @@ macro_rules! define_kms_key_provider_impl {
                 })?;
 
                 Ok(Key::<$name>::clone_from_slice(plaintext_blob.as_ref()))
-            }
-
-            async fn generate_data_key_with_aad(
-                &self,
-                _aad: &str,
-                _bytes_to_encrypt: usize,
-            ) -> Result<DataKey<Self::Cipher>, KeyGenerationError> {
-                todo!()
-            }
-
-            async fn decrypt_data_key_with_aad(
-                &self,
-                _aad: &str,
-                _encrypted_key: &[u8],
-            ) -> Result<Key<Self::Cipher>, KeyDecryptionError> {
-                todo!()
             }
         }
     };
@@ -227,7 +218,7 @@ mod tests {
                 let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
                 let key = provider
-                    .generate_data_key(0)
+                    .generate_data_key(0, None)
                     .await
                     .expect("Failed to generate data key");
 
@@ -250,7 +241,7 @@ mod tests {
             |client| async move {
                 let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
-                let result = provider.generate_data_key(0).await;
+                let result = provider.generate_data_key(0, None).await;
 
                 match result {
                     Ok(_) => panic!("Expected result to be an error"),
@@ -277,7 +268,7 @@ mod tests {
             |client| async move {
                 let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
-                let result = provider.generate_data_key(0).await;
+                let result = provider.generate_data_key(0, None).await;
 
                 match result {
                     Ok(_) => panic!("Expected result to be an error"),
@@ -305,7 +296,7 @@ mod tests {
             |client| async move {
                 let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
-                let result = provider.generate_data_key(0).await;
+                let result = provider.generate_data_key(0, None).await;
 
                 match result {
                     Ok(_) => panic!("Expected result to be an error"),
@@ -327,7 +318,7 @@ mod tests {
             |client| async move {
                 let provider = KMSKeyProvider::<Aes128Gcm>::new(client, key_id.into());
 
-                let result = provider.generate_data_key(0).await;
+                let result = provider.generate_data_key(0, None).await;
 
                 match result {
                     Ok(_) => panic!("Expected result to be an error"),

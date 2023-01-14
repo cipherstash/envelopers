@@ -209,45 +209,37 @@ where
 {
     type Cipher = S;
 
-    async fn generate_data_key(&self, bytes: usize) -> Result<DataKey<S>, KeyGenerationError> {
+    async fn generate_data_key(
+        &self,
+        bytes: usize,
+        _aad: Option<&str>,
+    ) -> Result<DataKey<S>, KeyGenerationError> {
         if let Some(cached_key) = self.get_and_increment_cached_encryption_key(bytes).await {
             return Ok(cached_key);
         }
 
-        let key = self.provider.generate_data_key(bytes).await?;
+        let key = self.provider.generate_data_key(bytes, None).await?;
 
         self.cache_encryption_key(bytes, key.clone()).await;
 
         Ok(key)
     }
 
-    async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<S>, KeyDecryptionError> {
+    async fn decrypt_data_key(
+        &self,
+        encrypted_key: &[u8],
+        _aad: Option<&str>,
+    ) -> Result<Key<S>, KeyDecryptionError> {
         if let Some(cached_key) = self.get_cached_decryption_key(encrypted_key).await {
             return Ok(cached_key);
         }
 
-        let plaintext_key = self.provider.decrypt_data_key(encrypted_key).await?;
+        let plaintext_key = self.provider.decrypt_data_key(encrypted_key, None).await?;
 
         self.cache_decryption_key(encrypted_key, plaintext_key)
             .await;
 
         Ok(plaintext_key)
-    }
-
-    async fn generate_data_key_with_aad(
-        &self,
-        _aad: &str,
-        _bytes_to_encrypt: usize,
-    ) -> Result<DataKey<Self::Cipher>, KeyGenerationError> {
-        todo!()
-    }
-
-    async fn decrypt_data_key_with_aad(
-        &self,
-        _aad: &str,
-        _encrypted_key: &[u8],
-    ) -> Result<Key<Self::Cipher>, KeyDecryptionError> {
-        todo!()
     }
 }
 
@@ -316,6 +308,7 @@ mod tests {
         async fn decrypt_data_key(
             &self,
             encrypted_key: &[u8],
+            _aad: Option<&str>,
         ) -> Result<Key<Aes128Gcm>, KeyDecryptionError> {
             self.decrypt_counter.fetch_add(1, Ordering::Relaxed);
             Ok(Key::<Aes128>::clone_from_slice(&test_decrypt_bytes(
@@ -326,6 +319,7 @@ mod tests {
         async fn generate_data_key(
             &self,
             _bytes_to_encrypt: usize,
+            _aad: Option<&str>,
         ) -> Result<DataKey<Aes128Gcm>, KeyGenerationError> {
             let count = self.generate_counter.fetch_add(1, Ordering::Relaxed);
             // Generate a data key that is just the current count for all bytes
@@ -336,22 +330,6 @@ mod tests {
                 encrypted_key,
                 key_id: "test".into(),
             })
-        }
-
-        async fn generate_data_key_with_aad(
-            &self,
-            _aad: &str,
-            _bytes_to_encrypt: usize,
-        ) -> Result<DataKey<Self::Cipher>, KeyGenerationError> {
-            todo!()
-        }
-
-        async fn decrypt_data_key_with_aad(
-            &self,
-            _aad: &str,
-            _encrypted_key: &[u8],
-        ) -> Result<Key<Self::Cipher>, KeyDecryptionError> {
-            todo!()
         }
     }
 
@@ -372,11 +350,11 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        assert!(cache.generate_data_key(10).await.is_ok());
+        assert!(cache.generate_data_key(10, None).await.is_ok());
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
-        assert!(cache.generate_data_key(10).await.is_ok());
+        assert!(cache.generate_data_key(10, None).await.is_ok());
 
         // Not incremented because cache was used
         assert_eq!(cache.provider.get_generate_count(), 1);
@@ -388,17 +366,17 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        assert!(cache.generate_data_key(1).await.is_ok());
+        assert!(cache.generate_data_key(1, None).await.is_ok());
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
         for _ in 0..9 {
-            assert!(cache.generate_data_key(1).await.is_ok());
+            assert!(cache.generate_data_key(1, None).await.is_ok());
         }
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
-        assert!(cache.generate_data_key(1).await.is_ok());
+        assert!(cache.generate_data_key(1, None).await.is_ok());
 
         // Incremented because 11th message needed new data key
         assert_eq!(cache.provider.get_generate_count(), 2);
@@ -410,13 +388,13 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        assert!(cache.generate_data_key(10).await.is_ok()); // 10
-        assert!(cache.generate_data_key(30).await.is_ok()); // 40
-        assert!(cache.generate_data_key(60).await.is_ok()); // 100
+        assert!(cache.generate_data_key(10, None).await.is_ok()); // 10
+        assert!(cache.generate_data_key(30, None).await.is_ok()); // 40
+        assert!(cache.generate_data_key(60, None).await.is_ok()); // 100
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
-        assert!(cache.generate_data_key(1).await.is_ok()); // 101
+        assert!(cache.generate_data_key(1, None).await.is_ok()); // 101
 
         assert_eq!(cache.provider.get_generate_count(), 2);
     }
@@ -427,7 +405,7 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        assert!(cache.generate_data_key(10).await.is_ok());
+        assert!(cache.generate_data_key(10, None).await.is_ok());
         assert_eq!(cache.provider.get_generate_count(), 1);
 
         std::thread::sleep(Duration::from_millis(8));
@@ -436,7 +414,7 @@ mod tests {
 
         std::thread::sleep(Duration::from_millis(8));
 
-        assert!(cache.generate_data_key(10).await.is_ok());
+        assert!(cache.generate_data_key(10, None).await.is_ok());
         assert_eq!(cache.provider.get_generate_count(), 2);
     }
 
@@ -447,14 +425,14 @@ mod tests {
         assert_eq!(cache.provider.get_generate_count(), 0);
 
         let data_key = cache
-            .generate_data_key(10)
+            .generate_data_key(10, None)
             .await
             .expect("Expected generate to succeed");
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
         assert!(cache
-            .decrypt_data_key(&data_key.encrypted_key)
+            .decrypt_data_key(&data_key.encrypted_key, None)
             .await
             .is_ok());
 
@@ -469,14 +447,14 @@ mod tests {
         let key: Key<Aes128> = Key::<Aes128>::clone_from_slice(&[1; 16]);
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .decrypt_data_key(&test_encrypt_bytes(&key), None)
             .await
             .is_ok());
 
         assert_eq!(cache.provider.get_decrypt_count(), 1);
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .decrypt_data_key(&test_encrypt_bytes(&key), None)
             .await
             .is_ok());
 
@@ -496,7 +474,7 @@ mod tests {
         let key: Key<Aes128> = Key::<Aes128>::clone_from_slice(&[1; 16]);
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .decrypt_data_key(&test_encrypt_bytes(&key), None)
             .await
             .is_ok());
 
@@ -505,7 +483,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(8));
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .decrypt_data_key(&test_encrypt_bytes(&key), None)
             .await
             .is_ok());
 
@@ -514,7 +492,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(8));
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .decrypt_data_key(&test_encrypt_bytes(&key), None)
             .await
             .is_ok());
 

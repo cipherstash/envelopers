@@ -27,24 +27,14 @@ pub trait KeyProvider: Send + Sync {
     async fn generate_data_key(
         &self,
         bytes_to_encrypt: usize,
+        aad: Option<&str>,
     ) -> Result<DataKey<Self::Cipher>, KeyGenerationError>;
 
     /// Decrypt an encrypted key and return the plaintext key
     async fn decrypt_data_key(
         &self,
         encrypted_key: &[u8],
-    ) -> Result<Key<Self::Cipher>, KeyDecryptionError>;
-
-    async fn generate_data_key_with_aad(
-        &self,
-        aad: &str,
-        bytes_to_encrypt: usize,
-    ) -> Result<DataKey<Self::Cipher>, KeyGenerationError>;
-
-    async fn decrypt_data_key_with_aad(
-        &self,
-        aad: &str,
-        encrypted_key: &[u8],
+        aad: Option<&str>,
     ) -> Result<Key<Self::Cipher>, KeyDecryptionError>;
 }
 
@@ -55,27 +45,16 @@ impl<S: KeySizeUser> KeyProvider for Box<dyn KeyProvider<Cipher = S>> {
     async fn generate_data_key(
         &self,
         bytes_to_encrypt: usize,
+        aad: Option<&str>,
     ) -> Result<DataKey<S>, KeyGenerationError> {
-        (**self).generate_data_key(bytes_to_encrypt).await
+        (**self).generate_data_key(bytes_to_encrypt, aad).await
     }
 
-    async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<S>, KeyDecryptionError> {
-        (**self).decrypt_data_key(encrypted_key).await
-    }
-
-    async fn generate_data_key_with_aad(
+    async fn decrypt_data_key(
         &self,
-        _aad: &str,
-        _bytes_to_encrypt: usize,
-    ) -> Result<DataKey<Self::Cipher>, KeyGenerationError> {
-        todo!()
-    }
-
-    async fn decrypt_data_key_with_aad(
-        &self,
-        _aad: &str,
-        _encrypted_key: &[u8],
-    ) -> Result<Key<Self::Cipher>, KeyDecryptionError> {
-        todo!()
+        encrypted_key: &[u8],
+        aad: Option<&str>,
+    ) -> Result<Key<S>, KeyDecryptionError> {
+        (**self).decrypt_data_key(encrypted_key, aad).await
     }
 }

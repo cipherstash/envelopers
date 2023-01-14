@@ -164,20 +164,11 @@ where
     }
 
     pub async fn encrypt(&self) -> Result<EncryptedRecord, EncryptionError> {
-        let data_key = match self.key_aad {
-            Some(key_aad) => {
-                self.cipher
-                    .provider
-                    .generate_data_key_with_aad(key_aad, self.msg.len())
-                    .await?
-            }
-            None => {
-                self.cipher
-                    .provider
-                    .generate_data_key(self.msg.len())
-                    .await?
-            }
-        };
+        let data_key = self
+            .cipher
+            .provider
+            .generate_data_key(self.msg.len(), self.key_aad)
+            .await?;
 
         let aad = match self.aad {
             Some(a) => [data_key.key_id.as_bytes(), a.as_bytes()].concat(),
@@ -243,20 +234,11 @@ where
     }
 
     pub async fn decrypt(&self) -> Result<Vec<u8>, DecryptionError> {
-        let key = match self.key_aad {
-            Some(key_aad) => {
-                self.cipher
-                    .provider
-                    .decrypt_data_key_with_aad(key_aad, &self.encrypted_record.encrypted_key)
-                    .await?
-            }
-            None => {
-                self.cipher
-                    .provider
-                    .decrypt_data_key(&self.encrypted_record.encrypted_key)
-                    .await?
-            }
-        };
+        let key = self
+            .cipher
+            .provider
+            .decrypt_data_key(&self.encrypted_record.encrypted_key, self.key_aad)
+            .await?;
 
         let aad = match self.aad {
             Some(a) => [self.encrypted_record.key_id.as_bytes(), a.as_bytes()].concat(),

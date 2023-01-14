@@ -98,14 +98,19 @@ macro_rules! define_simple_key_provider_impl {
             async fn decrypt_data_key(
                 &self,
                 encrypted_key: &[u8],
+                aad: Option<&str>,
             ) -> Result<Key<$name>, KeyDecryptionError> {
                 let decoded_key = EncryptedSimpleKey::from_slice(encrypted_key)?;
 
+                let aad = match aad {
+                    Some(a) => [&[decoded_key.version], a.as_bytes()].concat(),
+                    None => vec![decoded_key.version],
+                };
                 let data_key = self.cipher.decrypt(
                     decoded_key.nonce,
                     Payload {
                         msg: decoded_key.key,
-                        aad: &[decoded_key.version],
+                        aad: &aad,
                     },
                 )?;
 
@@ -115,20 +120,28 @@ macro_rules! define_simple_key_provider_impl {
             async fn generate_data_key(
                 &self,
                 _bytes: usize,
+                aad: Option<&str>,
             ) -> Result<DataKey<$name>, KeyGenerationError> {
                 let version = 1;
-                let mut data_key: Key<$name> = Default::default();
-                let mut nonce: Nonce = Default::default();
 
-                {
+                let (data_key, nonce) = {
+                    let mut data_key: Key<$name> = Default::default();
+                    let mut nonce: Nonce = Default::default();
                     let mut rng = self.rng.lock().unwrap_or_else(|e| e.into_inner());
                     rng.try_fill_bytes(&mut data_key)?;
                     rng.try_fill_bytes(&mut nonce)?;
-                }
+
+                    (data_key, nonce)
+                };
+
+                let aad = match aad {
+                    Some(a) => [&[version], a.as_bytes()].concat(),
+                    None => vec![version],
+                };
 
                 let payload = Payload {
                     msg: &data_key,
-                    aad: &[version],
+                    aad: &aad,
                 };
 
                 let ciphertext = self.cipher.encrypt(&nonce, payload)?;
@@ -144,22 +157,6 @@ macro_rules! define_simple_key_provider_impl {
                     encrypted_key: encrypted_key.to_vec(),
                     key_id: String::from("simplekey"),
                 });
-            }
-
-            async fn generate_data_key_with_aad(
-                &self,
-                _aad: &str,
-                _bytes_to_encrypt: usize,
-            ) -> Result<DataKey<Self::Cipher>, KeyGenerationError> {
-                todo!()
-            }
-
-            async fn decrypt_data_key_with_aad(
-                &self,
-                _aad: &str,
-                _encrypted_key: &[u8],
-            ) -> Result<Key<Self::Cipher>, KeyDecryptionError> {
-                todo!()
             }
         }
     };
@@ -188,9 +185,9 @@ mod tests {
     async fn test_generate_decrypt_data_key<S: KeySizeUser, K: KeyProvider<Cipher = S>>(
         provider: K,
     ) {
-        let data_key = provider.generate_data_key(0).await.unwrap();
+        let data_key = provider.generate_data_key(0, None).await.unwrap();
         let decrypted_data_key = provider
-            .decrypt_data_key(&data_key.encrypted_key)
+            .decrypt_data_key(&data_key.encrypted_key, None)
             .await
             .unwrap();
 
@@ -242,11 +239,11 @@ mod tests {
         let first: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([0; 16]);
         let second: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([1; 16]);
 
-        let data_key = first.generate_data_key(0).await.unwrap();
+        let data_key = first.generate_data_key(0, None).await.unwrap();
 
         assert_eq!(
             second
-                .decrypt_data_key(&data_key.encrypted_key)
+                .decrypt_data_key(&data_key.encrypted_key, None)
                 .await
                 .map_err(|e| e.to_string())
                 .expect_err("Decrypting data key suceeded"),
@@ -258,11 +255,11 @@ mod tests {
     async fn test_fails_on_invalid_nonce() {
         let provider: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([0; 16]);
 
-        let mut data_key = provider.generate_data_key(0).await.unwrap();
+        let mut data_key = provider.generate_data_key(0, None).await.unwrap();
 
         // Decrypts data key fine
         assert!(provider
-            .decrypt_data_key(&data_key.encrypted_key)
+            .decrypt_data_key(&data_key.encrypted_key, None)
             .await
             .is_ok());
 
@@ -272,7 +269,7 @@ mod tests {
 
         assert_eq!(
             provider
-                .decrypt_data_key(&data_key.encrypted_key)
+                .decrypt_data_key(&data_key.encrypted_key, None)
                 .await
                 .map_err(|e| e.to_string())
                 .expect_err("Decrypting data key succeeded"),
@@ -284,11 +281,11 @@ mod tests {
     async fn test_fails_on_invalid_version() {
         let provider: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([0; 16]);
 
-        let mut data_key = provider.generate_data_key(0).await.unwrap();
+        let mut data_key = provider.generate_data_key(0, None).await.unwrap();
 
         // Decrypts data key fine
         assert!(provider
-            .decrypt_data_key(&data_key.encrypted_key)
+            .decrypt_data_key(&data_key.encrypted_key, None)
             .await
             .is_ok());
 
@@ -297,7 +294,7 @@ mod tests {
 
         assert_eq!(
             provider
-                .decrypt_data_key(&data_key.encrypted_key)
+                .decrypt_data_key(&data_key.encrypted_key, None)
                 .await
                 .map_err(|e| e.to_string())
                 .expect_err("Decrypting data key succeeded"),
