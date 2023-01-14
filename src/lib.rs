@@ -355,7 +355,7 @@ mod tests {
             .unwrap();
         let decrypted = cipher
             .decrypt_with(&record)
-            .aad(&aad)
+            .aad(aad)
             .decrypt()
             .await
             .unwrap();

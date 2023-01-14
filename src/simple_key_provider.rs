@@ -148,16 +148,16 @@ macro_rules! define_simple_key_provider_impl {
 
             async fn generate_data_key_with_aad(
                 &self,
-                aad: &str,
-                bytes_to_encrypt: usize,
+                _aad: &str,
+                _bytes_to_encrypt: usize,
             ) -> Result<DataKey<Self::Cipher>, KeyGenerationError> {
                 todo!()
             }
 
             async fn decrypt_data_key_with_aad(
                 &self,
-                aad: &str,
-                encrypted_key: &[u8],
+                _aad: &str,
+                _encrypted_key: &[u8],
             ) -> Result<Key<Self::Cipher>, KeyDecryptionError> {
                 todo!()
             }
