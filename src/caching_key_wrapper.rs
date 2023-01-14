@@ -233,6 +233,22 @@ where
 
         Ok(plaintext_key)
     }
+
+    async fn generate_data_key_with_aad(
+        &self,
+        aad: &str,
+        bytes_to_encrypt: usize,
+    ) -> Result<DataKey<Self::Cipher>, KeyGenerationError> {
+        todo!()
+    }
+
+    async fn decrypt_data_key_with_aad(
+        &self,
+        aad: &str,
+        encrypted_key: &[u8],
+    ) -> Result<Key<Self::Cipher>, KeyDecryptionError> {
+        todo!()
+    }
 }
 
 #[cfg(test)]
@@ -320,6 +336,22 @@ mod tests {
                 encrypted_key,
                 key_id: "test".into(),
             })
+        }
+
+        async fn generate_data_key_with_aad(
+            &self,
+            aad: &str,
+            bytes_to_encrypt: usize,
+        ) -> Result<DataKey<Self::Cipher>, KeyGenerationError> {
+            todo!()
+        }
+
+        async fn decrypt_data_key_with_aad(
+            &self,
+            aad: &str,
+            encrypted_key: &[u8],
+        ) -> Result<Key<Self::Cipher>, KeyDecryptionError> {
+            todo!()
         }
     }
 

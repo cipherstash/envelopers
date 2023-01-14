@@ -129,6 +129,22 @@ macro_rules! define_kms_key_provider_impl {
 
                 Ok(Key::<$name>::clone_from_slice(plaintext_blob.as_ref()))
             }
+
+            async fn generate_data_key_with_aad(
+                &self,
+                aad: &str,
+                bytes_to_encrypt: usize,
+            ) -> Result<DataKey<Self::Cipher>, KeyGenerationError> {
+                todo!()
+            }
+
+            async fn decrypt_data_key_with_aad(
+                &self,
+                aad: &str,
+                encrypted_key: &[u8],
+            ) -> Result<Key<Self::Cipher>, KeyDecryptionError> {
+                todo!()
+            }
         }
     };
 }
