@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use aes_gcm::{Aes128Gcm, Aes256Gcm, Key, KeySizeUser};
