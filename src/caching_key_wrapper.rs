@@ -288,7 +288,7 @@ mod tests {
         time::Duration,
     };
 
-    fn test_encrypt_bytes(bytes: &[u8]) -> Vec<u8> {
+    fn test_encrypt_bytes(bytes: &[u8], aad: Option<&str>) -> Vec<u8> {
         let cipher = Aes128Gcm::new_from_slice(&[1; 16]).unwrap();
 
         cipher
@@ -296,20 +296,20 @@ mod tests {
                 Nonce::from_slice(&[2; 12]),
                 Payload {
                     msg: bytes,
-                    aad: &[],
+                    aad: aad.unwrap_or_default().as_bytes(),
                 },
             )
             .expect("Failed to encrypt")
     }
 
-    fn test_decrypt_bytes(bytes: &[u8]) -> Vec<u8> {
+    fn test_decrypt_bytes(bytes: &[u8], aad: Option<&str>) -> Vec<u8> {
         let cipher = Aes128Gcm::new_from_slice(&[1; 16]).unwrap();
         cipher
             .decrypt(
                 Nonce::from_slice(&[2; 12]),
                 Payload {
                     msg: bytes,
-                    aad: &[],
+                    aad: aad.unwrap_or_default().as_bytes(),
                 },
             )
             .expect("Failed to decrypt")
@@ -338,23 +338,24 @@ mod tests {
         async fn decrypt_data_key(
             &self,
             encrypted_key: &[u8],
-            _aad: Option<&str>,
+            aad: Option<&str>,
         ) -> Result<Key<Aes128Gcm>, KeyDecryptionError> {
             self.decrypt_counter.fetch_add(1, Ordering::Relaxed);
             Ok(Key::<Aes128>::clone_from_slice(&test_decrypt_bytes(
                 encrypted_key,
+                aad,
             )))
         }
 
         async fn generate_data_key(
             &self,
             _bytes_to_encrypt: usize,
-            _aad: Option<&str>,
+            aad: Option<&str>,
         ) -> Result<DataKey<Aes128Gcm>, KeyGenerationError> {
             let count = self.generate_counter.fetch_add(1, Ordering::Relaxed);
             // Generate a data key that is just the current count for all bytes
             let key = Key::<Aes128>::clone_from_slice(&[count; 16]);
-            let encrypted_key = test_encrypt_bytes(&key);
+            let encrypted_key = test_encrypt_bytes(&key, aad);
             Ok(DataKey {
                 key,
                 encrypted_key,
@@ -477,14 +478,14 @@ mod tests {
         let key: Key<Aes128> = Key::<Aes128>::clone_from_slice(&[1; 16]);
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key), None)
+            .decrypt_data_key(&test_encrypt_bytes(&key, None), None)
             .await
             .is_ok());
 
         assert_eq!(cache.provider.get_decrypt_count(), 1);
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key), None)
+            .decrypt_data_key(&test_encrypt_bytes(&key, None), None)
             .await
             .is_ok());
 
@@ -504,7 +505,7 @@ mod tests {
         let key: Key<Aes128> = Key::<Aes128>::clone_from_slice(&[1; 16]);
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key), None)
+            .decrypt_data_key(&test_encrypt_bytes(&key, None), None)
             .await
             .is_ok());
 
@@ -513,7 +514,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(8));
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key), None)
+            .decrypt_data_key(&test_encrypt_bytes(&key, None), None)
             .await
             .is_ok());
 
@@ -522,7 +523,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(8));
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key), None)
+            .decrypt_data_key(&test_encrypt_bytes(&key, None), None)
             .await
             .is_ok());
 
