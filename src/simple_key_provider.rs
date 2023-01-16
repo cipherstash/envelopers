@@ -192,6 +192,15 @@ mod tests {
             .unwrap();
 
         assert_eq!(data_key.key, decrypted_data_key);
+
+        // with aad
+        let data_key = provider.generate_data_key(0, Some("abcde")).await.unwrap();
+        let decrypted_data_key = provider
+            .decrypt_data_key(&data_key.encrypted_key, Some("abcde"))
+            .await
+            .unwrap();
+
+        assert_eq!(data_key.key, decrypted_data_key);
     }
 
     #[tokio::test]
@@ -292,6 +301,39 @@ mod tests {
         // Replace key version with invalid one
         data_key.encrypted_key[0] = 5;
 
+        assert_eq!(
+            provider
+                .decrypt_data_key(&data_key.encrypted_key, None)
+                .await
+                .map_err(|e| e.to_string())
+                .expect_err("Decrypting data key succeeded"),
+            "failed to decrypt key"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_fails_on_invalid_aad() {
+        let provider: SimpleKeyProvider<Aes128Gcm> = SimpleKeyProvider::init([0; 16]);
+
+        let data_key = provider.generate_data_key(0, Some("abcdef")).await.unwrap();
+
+        // Decrypts data key fine
+        assert!(provider
+            .decrypt_data_key(&data_key.encrypted_key, Some("abcdef"))
+            .await
+            .is_ok());
+
+        // Fails on invalid aad
+        assert_eq!(
+            provider
+                .decrypt_data_key(&data_key.encrypted_key, Some("ghijk"))
+                .await
+                .map_err(|e| e.to_string())
+                .expect_err("Decrypting data key succeeded"),
+            "failed to decrypt key"
+        );
+
+        // Fails on missing aad
         assert_eq!(
             provider
                 .decrypt_data_key(&data_key.encrypted_key, None)

@@ -389,6 +389,17 @@ mod tests {
 
         // Not incremented because cache was used
         assert_eq!(cache.provider.get_generate_count(), 1);
+
+        // with aad
+        assert!(cache.generate_data_key(10, Some("abcde")).await.is_ok());
+
+        // Should increment because aad is different
+        assert_eq!(cache.provider.get_generate_count(), 2);
+
+        assert!(cache.generate_data_key(10, Some("abcde")).await.is_ok());
+
+        // Not incremented because cache was used
+        assert_eq!(cache.provider.get_generate_count(), 2);
     }
 
     #[tokio::test]
