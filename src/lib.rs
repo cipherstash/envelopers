@@ -343,6 +343,25 @@ mod tests {
             .unwrap();
 
         assert_eq!(String::from_utf8(decrypted).unwrap(), "hello");
+
+        // encrypt with data_key aad
+        let message = "hello".as_bytes();
+        let aad = "world";
+
+        let record = cipher
+            .encrypt_with(message)
+            .key_aad(aad)
+            .encrypt()
+            .await
+            .unwrap();
+        let decrypted = cipher
+            .decrypt_with(&record)
+            .key_aad(aad)
+            .decrypt()
+            .await
+            .unwrap();
+
+        assert_eq!(String::from_utf8(decrypted).unwrap(), "hello");
     }
 
     #[tokio::test]
