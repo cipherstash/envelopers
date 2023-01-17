@@ -100,11 +100,11 @@ pub use crate::errors::{DecryptionError, EncryptionError, KeyDecryptionError, Ke
 pub use crate::key_provider::{DataKey, KeyProvider};
 pub use crate::simple_key_provider::SimpleKeyProvider;
 
-#[cfg(feature = "cache")]
-pub use crate::caching_key_wrapper::{CacheOptions, CachingKeyWrapper};
-
 #[cfg(feature = "aws-kms")]
 pub use crate::kms_key_provider::KMSKeyProvider;
+
+#[cfg(feature = "cache")]
+pub use crate::caching_key_wrapper::{CacheOptions, CachingKeyWrapper};
 
 use aes_gcm::aead::{Aead, Payload};
 use aes_gcm::{KeyInit, Nonce};
@@ -133,6 +133,128 @@ impl EncryptedRecord {
     }
 }
 
+pub struct Encrypt<'a, K: KeyProvider, R: SafeRng> {
+    cipher: &'a EnvelopeCipher<K, R>,
+    msg: &'a [u8],
+    aad: Option<&'a str>,
+    key_aad: Option<&'a str>,
+}
+
+impl<'a, K: KeyProvider, R: SafeRng> Encrypt<'a, K, R>
+where
+    K::Cipher: Aead + KeyInit,
+{
+    fn new(cipher: &'a EnvelopeCipher<K, R>, msg: &'a [u8]) -> Self {
+        Self {
+            cipher,
+            msg,
+            aad: None,
+            key_aad: None,
+        }
+    }
+
+    pub fn aad(mut self, aad: &'a str) -> Self {
+        self.aad.replace(aad);
+        self
+    }
+
+    pub fn key_aad(mut self, aad: &'a str) -> Self {
+        self.aad.replace(aad);
+        self
+    }
+
+    pub async fn encrypt(&self) -> Result<EncryptedRecord, EncryptionError> {
+        let data_key = self
+            .cipher
+            .provider
+            .generate_data_key(self.msg.len(), self.key_aad)
+            .await?;
+
+        let aad = match self.aad {
+            Some(a) => [data_key.key_id.as_bytes(), a.as_bytes()].concat(),
+            None => data_key.key_id.as_bytes().to_vec(),
+        };
+
+        let nonce = {
+            let mut bytes = [0u8; 12];
+            let mut rng = self.cipher.rng.lock().await;
+            rng.try_fill_bytes(&mut bytes)?;
+
+            bytes
+        };
+
+        let key_id = data_key.key_id.clone();
+        let payload = Payload {
+            msg: self.msg,
+            aad: &aad,
+        };
+
+        // TODO: Use Zeroize for the drop
+        let key = Key::<K::Cipher>::from_slice(&data_key.key);
+        let cipher = K::Cipher::new(key);
+        let ciphertext = cipher.encrypt(Nonce::from_slice(&nonce), payload)?;
+
+        Ok(EncryptedRecord {
+            ciphertext,
+            nonce,
+            encrypted_key: data_key.encrypted_key.clone(),
+            key_id,
+        })
+    }
+}
+
+pub struct Decrypt<'a, K: KeyProvider, R: SafeRng> {
+    cipher: &'a EnvelopeCipher<K, R>,
+    encrypted_record: &'a EncryptedRecord,
+    aad: Option<&'a str>,
+    key_aad: Option<&'a str>,
+}
+
+impl<'a, K: KeyProvider, R: SafeRng> Decrypt<'a, K, R>
+where
+    K::Cipher: Aead + KeyInit,
+{
+    fn new(cipher: &'a EnvelopeCipher<K, R>, encrypted_record: &'a EncryptedRecord) -> Self {
+        Self {
+            cipher,
+            encrypted_record,
+            aad: None,
+            key_aad: None,
+        }
+    }
+
+    pub fn aad(mut self, aad: &'a str) -> Self {
+        self.aad.replace(aad);
+        self
+    }
+
+    pub fn key_aad(mut self, aad: &'a str) -> Self {
+        self.aad.replace(aad);
+        self
+    }
+
+    pub async fn decrypt(&self) -> Result<Vec<u8>, DecryptionError> {
+        let key = self
+            .cipher
+            .provider
+            .decrypt_data_key(&self.encrypted_record.encrypted_key, self.key_aad)
+            .await?;
+
+        let aad = match self.aad {
+            Some(a) => [self.encrypted_record.key_id.as_bytes(), a.as_bytes()].concat(),
+            None => self.encrypted_record.key_id.as_bytes().to_vec(),
+        };
+
+        let msg = self.encrypted_record.ciphertext.as_ref();
+        let payload = Payload { msg, aad: &aad };
+
+        let cipher = K::Cipher::new(&key);
+        let message = cipher.decrypt(Nonce::from_slice(&self.encrypted_record.nonce), payload)?;
+
+        Ok(message)
+    }
+}
+
 pub struct EnvelopeCipher<K, R: SafeRng = ChaChaRng> {
     pub provider: K,
     pub rng: AsyncMutex<R>,
@@ -147,7 +269,7 @@ impl<K, R: SafeRng> EnvelopeCipher<K, R> {
     }
 }
 
-impl<K: KeyProvider, R: SafeRng> EnvelopeCipher<K, R>
+impl<'a, K: KeyProvider, R: SafeRng> EnvelopeCipher<K, R>
 where
     K::Cipher: Aead + KeyInit,
 {
@@ -155,52 +277,19 @@ where
         &self,
         encrypted_record: &EncryptedRecord,
     ) -> Result<Vec<u8>, DecryptionError> {
-        let key = self
-            .provider
-            .decrypt_data_key(encrypted_record.encrypted_key.as_ref())
-            .await?;
-
-        let aad = &encrypted_record.key_id;
-        let msg = encrypted_record.ciphertext.as_ref();
-        let payload = Payload {
-            msg,
-            aad: aad.as_bytes(),
-        };
-
-        let cipher = K::Cipher::new(&key);
-        let message = cipher.decrypt(Nonce::from_slice(&encrypted_record.nonce), payload)?;
-
-        Ok(message)
+        Decrypt::new(self, encrypted_record).decrypt().await
     }
 
     pub async fn encrypt(&self, msg: &[u8]) -> Result<EncryptedRecord, EncryptionError> {
-        let data_key = self.provider.generate_data_key(msg.len()).await?;
-        let key_id = data_key.key_id.clone();
+        Encrypt::new(self, msg).encrypt().await
+    }
 
-        let mut nonce_data = [0u8; 12];
-        {
-            let mut rng = self.rng.lock().await;
-            rng.try_fill_bytes(&mut nonce_data)?;
-        }
+    pub fn encrypt_with(&'a self, msg: &'a [u8]) -> Encrypt<K, R> {
+        Encrypt::new(self, msg)
+    }
 
-        let payload = Payload {
-            msg,
-            aad: key_id.as_bytes(),
-        };
-
-        let nonce = Nonce::from_slice(&nonce_data);
-
-        // TODO: Use Zeroize for the drop
-        let key = Key::<K::Cipher>::from_slice(&data_key.key);
-        let cipher = K::Cipher::new(key);
-        let ciphertext = cipher.encrypt(nonce, payload)?;
-
-        Ok(EncryptedRecord {
-            ciphertext,
-            nonce: nonce_data,
-            encrypted_key: data_key.encrypted_key.clone(),
-            key_id,
-        })
+    pub fn decrypt_with(&'a self, encrypted_record: &'a EncryptedRecord) -> Decrypt<K, R> {
+        Decrypt::new(self, encrypted_record)
     }
 }
 
@@ -228,10 +317,49 @@ mod tests {
     where
         K::Cipher: Aead + KeyInit,
     {
+        // encrypt without aad
         let message = "hello".as_bytes();
 
         let record = cipher.encrypt(message).await.unwrap();
         let decrypted = cipher.decrypt(&record).await.unwrap();
+
+        assert_eq!(String::from_utf8(decrypted).unwrap(), "hello");
+
+        // encrypt with aad
+        let message = "hello".as_bytes();
+        let aad = "world";
+
+        let record = cipher
+            .encrypt_with(message)
+            .aad(aad)
+            .encrypt()
+            .await
+            .unwrap();
+        let decrypted = cipher
+            .decrypt_with(&record)
+            .aad(aad)
+            .decrypt()
+            .await
+            .unwrap();
+
+        assert_eq!(String::from_utf8(decrypted).unwrap(), "hello");
+
+        // encrypt with data_key aad
+        let message = "hello".as_bytes();
+        let aad = "world";
+
+        let record = cipher
+            .encrypt_with(message)
+            .key_aad(aad)
+            .encrypt()
+            .await
+            .unwrap();
+        let decrypted = cipher
+            .decrypt_with(&record)
+            .key_aad(aad)
+            .decrypt()
+            .await
+            .unwrap();
 
         assert_eq!(String::from_utf8(decrypted).unwrap(), "hello");
     }

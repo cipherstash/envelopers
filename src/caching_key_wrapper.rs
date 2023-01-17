@@ -79,7 +79,7 @@ impl Default for CacheOptions {
 /// - max bytes encrypted per key
 /// - max time key can be cached for
 pub struct CachingKeyWrapper<S: KeySizeUser, K> {
-    encryption_cache: AsyncMutex<Vec<CachedEncryptionEntry<S>>>,
+    encryption_cache: AsyncMutex<LruCache<Vec<u8>, Vec<CachedEncryptionEntry<S>>>>,
     decryption_cache: AsyncMutex<LruCache<Vec<u8>, CachedDecryptionEntry<S>>>,
     options: CacheOptions,
     provider: K,
@@ -94,7 +94,7 @@ where
         Self {
             provider,
             decryption_cache: AsyncMutex::new(LruCache::new(options.max_entries)),
-            encryption_cache: AsyncMutex::new(vec![]),
+            encryption_cache: AsyncMutex::new(LruCache::new(options.max_entries)),
             options,
         }
     }
@@ -121,37 +121,50 @@ where
         }
     }
 
-    async fn get_and_increment_cached_encryption_key(&self, bytes: usize) -> Option<DataKey<S>> {
-        let mut cached = self.encryption_cache.lock().await;
+    async fn get_and_increment_cached_encryption_key(
+        &self,
+        bytes: usize,
+        aad: Option<&str>,
+    ) -> Option<DataKey<S>> {
+        let mut encryption_cache = self.encryption_cache.lock().await;
 
-        while let Some(mut cached_entry) = cached.pop() {
-            cached_entry.messages_encrypted += 1;
-            cached_entry.bytes_encrypted += bytes;
+        let cache_key = aad.unwrap_or_default().as_bytes();
+        if let Some(cached_entries) = encryption_cache.get_mut(cache_key) {
+            while let Some(mut cached_encryption_entry) = cached_entries.pop() {
+                cached_encryption_entry.messages_encrypted += 1;
+                cached_encryption_entry.bytes_encrypted += bytes;
 
-            if !self.has_exceeded_limits(&cached_entry) {
-                // Cloning here could be bad for zeroing memory + performance.
-                // Maybe change this method to be a "with_data_key_for_bytes" so that
-                // we can borrow the key instead.
-                let key = cached_entry.key.clone();
+                if !self.has_exceeded_limits(&cached_encryption_entry) {
+                    // Cloning here could be bad for zeroing memory + performance.
+                    // Maybe change this method to be a "with_data_key_for_bytes" so that
+                    // we can borrow the key instead.
+                    let key = cached_encryption_entry.key.clone();
 
-                // Since the entry is fine to keep, add it back to the stack
-                cached.push(cached_entry);
+                    // Since the entry is fine to keep, add it back to the stack
+                    cached_entries.push(cached_encryption_entry);
 
-                return Some(key);
+                    return Some(key);
+                }
             }
         }
 
         None
     }
 
-    async fn get_cached_decryption_key(&self, encrypted_key: &[u8]) -> Option<Key<S>> {
+    async fn get_cached_decryption_key(
+        &self,
+        encrypted_key: &[u8],
+        aad: Option<&str>,
+    ) -> Option<Key<S>> {
         let mut decryption_cache = self.decryption_cache.lock().await;
 
-        if let Some(cached_key) = decryption_cache.get(encrypted_key) {
+        let cache_key = [encrypted_key, aad.unwrap_or_default().as_bytes()].concat();
+
+        if let Some(cached_decryption_entry) = decryption_cache.get(&cache_key) {
             // Only return the cached key if the age is less than the max_age param.
             // I don't think this is strictly necessary, but it's what the JS AWS SDK does.
-            if cached_key.created_at.elapsed() <= self.options.max_age {
-                return Some(cached_key.key);
+            if cached_decryption_entry.created_at.elapsed() <= self.options.max_age {
+                return Some(cached_decryption_entry.key);
             }
         }
 
@@ -160,29 +173,38 @@ where
         None
     }
 
-    async fn cache_encryption_key(&self, bytes: usize, key: DataKey<S>) {
-        let mut cached = self.encryption_cache.lock().await;
+    async fn cache_encryption_key(&self, bytes: usize, key: DataKey<S>, aad: Option<&str>) {
+        let mut encryption_cache = self.encryption_cache.lock().await;
         let mut decryption_cache = self.decryption_cache.lock().await;
 
-        // If the encryption cache has too many entries, remove the first one.
-        // This operation needs to shift all the elements in the Vec, but should
-        // be negligible since the "max_entries" option on the cache will most
-        // likely be <1000.
-        if cached.len() >= self.options.max_entries {
-            cached.remove(0);
-        }
-
-        cached.push(CachedEncryptionEntry {
+        let cache_key = aad.unwrap_or_default().as_bytes();
+        let cached_encryption_entry = CachedEncryptionEntry {
             key: key.clone(),
             bytes_encrypted: bytes,
             messages_encrypted: 1,
             created_at: Instant::now(),
-        });
+        };
+
+        if let Some(cached_encryption_entries) = encryption_cache.get_mut(cache_key) {
+            // If the encryption cache has too many entries, remove the first one.
+            // This operation needs to shift all the elements in the Vec, but should
+            // be negligible since the "max_entries" option on the cache will most
+            // likely be <1000.
+            if cached_encryption_entries.len() >= self.options.max_entries {
+                cached_encryption_entries.remove(0);
+            }
+
+            cached_encryption_entries.push(cached_encryption_entry);
+        } else {
+            let cached_encryption_entries = vec![cached_encryption_entry];
+            encryption_cache.put(cache_key.to_vec(), cached_encryption_entries);
+        }
 
         self.maybe_prune_last_decryption_entry(&mut decryption_cache);
 
+        let dec_cache_key = [&key.encrypted_key, aad.unwrap_or_default().as_bytes()].concat();
         decryption_cache.put(
-            key.encrypted_key.clone(),
+            dec_cache_key,
             CachedDecryptionEntry {
                 key: key.key,
                 created_at: Instant::now(),
@@ -190,10 +212,15 @@ where
         );
     }
 
-    async fn cache_decryption_key(&self, encrypted_key: &[u8], plaintext_key: Key<S>) {
+    async fn cache_decryption_key(
+        &self,
+        encrypted_key: &[u8],
+        plaintext_key: Key<S>,
+        aad: Option<&str>,
+    ) {
+        let cache_key = [encrypted_key, aad.unwrap_or_default().as_bytes()].concat();
         self.decryption_cache.lock().await.put(
-            // Sucks that you have to clone here - surely they can hash from a reference
-            encrypted_key.to_vec(),
+            cache_key,
             CachedDecryptionEntry {
                 key: plaintext_key,
                 created_at: Instant::now(),
@@ -209,26 +236,37 @@ where
 {
     type Cipher = S;
 
-    async fn generate_data_key(&self, bytes: usize) -> Result<DataKey<S>, KeyGenerationError> {
-        if let Some(cached_key) = self.get_and_increment_cached_encryption_key(bytes).await {
+    async fn generate_data_key(
+        &self,
+        bytes: usize,
+        aad: Option<&str>,
+    ) -> Result<DataKey<S>, KeyGenerationError> {
+        if let Some(cached_key) = self
+            .get_and_increment_cached_encryption_key(bytes, aad)
+            .await
+        {
             return Ok(cached_key);
         }
 
-        let key = self.provider.generate_data_key(bytes).await?;
+        let key = self.provider.generate_data_key(bytes, aad).await?;
 
-        self.cache_encryption_key(bytes, key.clone()).await;
+        self.cache_encryption_key(bytes, key.clone(), aad).await;
 
         Ok(key)
     }
 
-    async fn decrypt_data_key(&self, encrypted_key: &[u8]) -> Result<Key<S>, KeyDecryptionError> {
-        if let Some(cached_key) = self.get_cached_decryption_key(encrypted_key).await {
+    async fn decrypt_data_key(
+        &self,
+        encrypted_key: &[u8],
+        aad: Option<&str>,
+    ) -> Result<Key<S>, KeyDecryptionError> {
+        if let Some(cached_key) = self.get_cached_decryption_key(encrypted_key, aad).await {
             return Ok(cached_key);
         }
 
-        let plaintext_key = self.provider.decrypt_data_key(encrypted_key).await?;
+        let plaintext_key = self.provider.decrypt_data_key(encrypted_key, aad).await?;
 
-        self.cache_decryption_key(encrypted_key, plaintext_key)
+        self.cache_decryption_key(encrypted_key, plaintext_key, aad)
             .await;
 
         Ok(plaintext_key)
@@ -250,7 +288,7 @@ mod tests {
         time::Duration,
     };
 
-    fn test_encrypt_bytes(bytes: &[u8]) -> Vec<u8> {
+    fn test_encrypt_bytes(bytes: &[u8], aad: Option<&str>) -> Vec<u8> {
         let cipher = Aes128Gcm::new_from_slice(&[1; 16]).unwrap();
 
         cipher
@@ -258,20 +296,20 @@ mod tests {
                 Nonce::from_slice(&[2; 12]),
                 Payload {
                     msg: bytes,
-                    aad: &[],
+                    aad: aad.unwrap_or_default().as_bytes(),
                 },
             )
             .expect("Failed to encrypt")
     }
 
-    fn test_decrypt_bytes(bytes: &[u8]) -> Vec<u8> {
+    fn test_decrypt_bytes(bytes: &[u8], aad: Option<&str>) -> Vec<u8> {
         let cipher = Aes128Gcm::new_from_slice(&[1; 16]).unwrap();
         cipher
             .decrypt(
                 Nonce::from_slice(&[2; 12]),
                 Payload {
                     msg: bytes,
-                    aad: &[],
+                    aad: aad.unwrap_or_default().as_bytes(),
                 },
             )
             .expect("Failed to decrypt")
@@ -300,21 +338,24 @@ mod tests {
         async fn decrypt_data_key(
             &self,
             encrypted_key: &[u8],
+            aad: Option<&str>,
         ) -> Result<Key<Aes128Gcm>, KeyDecryptionError> {
             self.decrypt_counter.fetch_add(1, Ordering::Relaxed);
             Ok(Key::<Aes128>::clone_from_slice(&test_decrypt_bytes(
                 encrypted_key,
+                aad,
             )))
         }
 
         async fn generate_data_key(
             &self,
             _bytes_to_encrypt: usize,
+            aad: Option<&str>,
         ) -> Result<DataKey<Aes128Gcm>, KeyGenerationError> {
             let count = self.generate_counter.fetch_add(1, Ordering::Relaxed);
             // Generate a data key that is just the current count for all bytes
             let key = Key::<Aes128>::clone_from_slice(&[count; 16]);
-            let encrypted_key = test_encrypt_bytes(&key);
+            let encrypted_key = test_encrypt_bytes(&key, aad);
             Ok(DataKey {
                 key,
                 encrypted_key,
@@ -340,14 +381,25 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        assert!(cache.generate_data_key(10).await.is_ok());
+        assert!(cache.generate_data_key(10, None).await.is_ok());
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
-        assert!(cache.generate_data_key(10).await.is_ok());
+        assert!(cache.generate_data_key(10, None).await.is_ok());
 
         // Not incremented because cache was used
         assert_eq!(cache.provider.get_generate_count(), 1);
+
+        // with aad
+        assert!(cache.generate_data_key(10, Some("abcde")).await.is_ok());
+
+        // Should increment because aad is different
+        assert_eq!(cache.provider.get_generate_count(), 2);
+
+        assert!(cache.generate_data_key(10, Some("abcde")).await.is_ok());
+
+        // Not incremented because cache was used
+        assert_eq!(cache.provider.get_generate_count(), 2);
     }
 
     #[tokio::test]
@@ -356,17 +408,17 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        assert!(cache.generate_data_key(1).await.is_ok());
+        assert!(cache.generate_data_key(1, None).await.is_ok());
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
         for _ in 0..9 {
-            assert!(cache.generate_data_key(1).await.is_ok());
+            assert!(cache.generate_data_key(1, None).await.is_ok());
         }
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
-        assert!(cache.generate_data_key(1).await.is_ok());
+        assert!(cache.generate_data_key(1, None).await.is_ok());
 
         // Incremented because 11th message needed new data key
         assert_eq!(cache.provider.get_generate_count(), 2);
@@ -378,13 +430,13 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        assert!(cache.generate_data_key(10).await.is_ok()); // 10
-        assert!(cache.generate_data_key(30).await.is_ok()); // 40
-        assert!(cache.generate_data_key(60).await.is_ok()); // 100
+        assert!(cache.generate_data_key(10, None).await.is_ok()); // 10
+        assert!(cache.generate_data_key(30, None).await.is_ok()); // 40
+        assert!(cache.generate_data_key(60, None).await.is_ok()); // 100
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
-        assert!(cache.generate_data_key(1).await.is_ok()); // 101
+        assert!(cache.generate_data_key(1, None).await.is_ok()); // 101
 
         assert_eq!(cache.provider.get_generate_count(), 2);
     }
@@ -395,7 +447,7 @@ mod tests {
 
         assert_eq!(cache.provider.get_generate_count(), 0);
 
-        assert!(cache.generate_data_key(10).await.is_ok());
+        assert!(cache.generate_data_key(10, None).await.is_ok());
         assert_eq!(cache.provider.get_generate_count(), 1);
 
         std::thread::sleep(Duration::from_millis(8));
@@ -404,7 +456,7 @@ mod tests {
 
         std::thread::sleep(Duration::from_millis(8));
 
-        assert!(cache.generate_data_key(10).await.is_ok());
+        assert!(cache.generate_data_key(10, None).await.is_ok());
         assert_eq!(cache.provider.get_generate_count(), 2);
     }
 
@@ -415,14 +467,14 @@ mod tests {
         assert_eq!(cache.provider.get_generate_count(), 0);
 
         let data_key = cache
-            .generate_data_key(10)
+            .generate_data_key(10, None)
             .await
             .expect("Expected generate to succeed");
 
         assert_eq!(cache.provider.get_generate_count(), 1);
 
         assert!(cache
-            .decrypt_data_key(&data_key.encrypted_key)
+            .decrypt_data_key(&data_key.encrypted_key, None)
             .await
             .is_ok());
 
@@ -437,14 +489,14 @@ mod tests {
         let key: Key<Aes128> = Key::<Aes128>::clone_from_slice(&[1; 16]);
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .decrypt_data_key(&test_encrypt_bytes(&key, None), None)
             .await
             .is_ok());
 
         assert_eq!(cache.provider.get_decrypt_count(), 1);
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .decrypt_data_key(&test_encrypt_bytes(&key, None), None)
             .await
             .is_ok());
 
@@ -464,7 +516,7 @@ mod tests {
         let key: Key<Aes128> = Key::<Aes128>::clone_from_slice(&[1; 16]);
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .decrypt_data_key(&test_encrypt_bytes(&key, None), None)
             .await
             .is_ok());
 
@@ -473,7 +525,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(8));
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .decrypt_data_key(&test_encrypt_bytes(&key, None), None)
             .await
             .is_ok());
 
@@ -482,7 +534,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(8));
 
         assert!(cache
-            .decrypt_data_key(&test_encrypt_bytes(&key))
+            .decrypt_data_key(&test_encrypt_bytes(&key, None), None)
             .await
             .is_ok());
 
