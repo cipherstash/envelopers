@@ -384,31 +384,31 @@ mod tests {
 
         let provider: SimpleKeyProvider<Aes256Gcm> = SimpleKeyProvider::init([1; 16]);
         let provider: Box<dyn KeyProvider<Cipher = _>> = Box::new(provider);
-        let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
     }
 
     #[tokio::test]
     async fn test_encrypt_decrypt_128_gcm_siv() {
         let provider: SimpleKeyProvider<Aes128GcmSiv> = SimpleKeyProvider::init([1; 16]);
-        let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
 
         let provider: SimpleKeyProvider<Aes128GcmSiv> = SimpleKeyProvider::init([1; 16]);
         let provider: Box<dyn KeyProvider<Cipher = _>> = Box::new(provider);
-        let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
     }
 
     #[tokio::test]
     async fn test_encrypt_decrypt_256_gcm_siv() {
         let provider: SimpleKeyProvider<Aes256GcmSiv> = SimpleKeyProvider::init([1; 16]);
-        let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
 
         let provider: SimpleKeyProvider<Aes256GcmSiv> = SimpleKeyProvider::init([1; 16]);
         let provider: Box<dyn KeyProvider<Cipher = _>> = Box::new(provider);
-        let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
     }
 
