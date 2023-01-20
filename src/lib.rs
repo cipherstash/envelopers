@@ -95,6 +95,7 @@ mod caching_key_wrapper;
 
 pub use aes_gcm::{Aes128Gcm, Aes256Gcm, Key, KeySizeUser};
 pub use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
+pub use serde_cbor::Error as SerdeCborError;
 
 pub use crate::errors::{DecryptionError, EncryptionError, KeyDecryptionError, KeyGenerationError};
 pub use crate::key_provider::{DataKey, KeyProvider};
@@ -124,11 +125,11 @@ pub struct EncryptedRecord {
 }
 
 impl EncryptedRecord {
-    pub fn to_vec(&self) -> serde_cbor::Result<Vec<u8>> {
+    pub fn to_vec(&self) -> Result<Vec<u8>, SerdeCborError> {
         serde_cbor::to_vec(&self)
     }
 
-    pub fn from_vec(vec: Vec<u8>) -> serde_cbor::Result<Self> {
+    pub fn from_vec(vec: Vec<u8>) -> Result<Self, SerdeCborError> {
         serde_cbor::from_slice(&vec[..])
     }
 }
