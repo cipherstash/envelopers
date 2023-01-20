@@ -95,7 +95,7 @@ impl Default for KeyDecryptionError {
 
 #[derive(Debug, Error)]
 #[error(transparent)]
-pub struct ERFromSliceError(#[from] serde_cbor::Error);
+pub struct ERFromBytesError(#[from] serde_cbor::Error);
 
 #[derive(Debug, Error)]
 #[error(transparent)]

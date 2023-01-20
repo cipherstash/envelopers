@@ -95,10 +95,9 @@ mod caching_key_wrapper;
 
 pub use aes_gcm::{Aes128Gcm, Aes256Gcm, Key, KeySizeUser};
 pub use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
-pub use serde_cbor::Error as SerdeCborError;
 
 pub use crate::errors::{
-    DecryptionError, ERFromSliceError, ERToBytesError, EncryptionError, KeyDecryptionError,
+    DecryptionError, ERFromBytesError, ERToBytesError, EncryptionError, KeyDecryptionError,
     KeyGenerationError,
 };
 pub use crate::key_provider::{DataKey, KeyProvider};
@@ -128,17 +127,17 @@ pub struct EncryptedRecord {
 }
 
 impl EncryptedRecord {
-    pub fn to_vec(&self) -> Result<Vec<u8>, SerdeCborError> {
-        serde_cbor::to_vec(&self)
+    pub fn to_vec(&self) -> Result<Vec<u8>, ERToBytesError> {
+        self.try_into()
     }
 
-    pub fn from_vec(vec: Vec<u8>) -> Result<Self, SerdeCborError> {
-        serde_cbor::from_slice(&vec[..])
+    pub fn from_vec(vec: Vec<u8>) -> Result<Self, ERFromBytesError> {
+        vec.try_into()
     }
 }
 
 impl TryFrom<&[u8]> for EncryptedRecord {
-    type Error = ERFromSliceError;
+    type Error = ERFromBytesError;
 
     fn try_from(slice: &[u8]) -> Result<Self, Self::Error> {
         Ok(serde_cbor::from_slice::<EncryptedRecord>(slice)?)
@@ -146,7 +145,7 @@ impl TryFrom<&[u8]> for EncryptedRecord {
 }
 
 impl TryFrom<Vec<u8>> for EncryptedRecord {
-    type Error = ERFromSliceError;
+    type Error = ERFromBytesError;
 
     fn try_from(vec: Vec<u8>) -> Result<Self, Self::Error> {
         vec.as_slice().try_into()
