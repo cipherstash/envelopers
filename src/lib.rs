@@ -145,11 +145,27 @@ impl TryFrom<&[u8]> for EncryptedRecord {
     }
 }
 
+impl TryFrom<Vec<u8>> for EncryptedRecord {
+    type Error = ERFromSliceError;
+
+    fn try_from(vec: Vec<u8>) -> Result<Self, Self::Error> {
+        vec.as_slice().try_into()
+    }
+}
+
 impl TryFrom<&EncryptedRecord> for Vec<u8> {
     type Error = ERToBytesError;
 
     fn try_from(er: &EncryptedRecord) -> Result<Self, Self::Error> {
         Ok(serde_cbor::to_vec(er)?)
+    }
+}
+
+impl TryFrom<EncryptedRecord> for Vec<u8> {
+    type Error = ERToBytesError;
+
+    fn try_from(er: EncryptedRecord) -> Result<Self, Self::Error> {
+        (&er).try_into()
     }
 }
 
