@@ -97,7 +97,10 @@ pub use aes_gcm::{Aes128Gcm, Aes256Gcm, Key, KeySizeUser};
 pub use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
 pub use serde_cbor::Error as SerdeCborError;
 
-pub use crate::errors::{DecryptionError, EncryptionError, KeyDecryptionError, KeyGenerationError};
+pub use crate::errors::{
+    DecryptionError, ERFromSliceError, ERToBytesError, EncryptionError, KeyDecryptionError,
+    KeyGenerationError,
+};
 pub use crate::key_provider::{DataKey, KeyProvider};
 pub use crate::simple_key_provider::SimpleKeyProvider;
 
@@ -131,6 +134,22 @@ impl EncryptedRecord {
 
     pub fn from_vec(vec: Vec<u8>) -> Result<Self, SerdeCborError> {
         serde_cbor::from_slice(&vec[..])
+    }
+}
+
+impl TryFrom<&[u8]> for EncryptedRecord {
+    type Error = ERFromSliceError;
+
+    fn try_from(slice: &[u8]) -> Result<Self, Self::Error> {
+        Ok(serde_cbor::from_slice::<EncryptedRecord>(slice)?)
+    }
+}
+
+impl TryFrom<&EncryptedRecord> for Vec<u8> {
+    type Error = ERToBytesError;
+
+    fn try_from(er: &EncryptedRecord) -> Result<Self, Self::Error> {
+        Ok(serde_cbor::to_vec(er)?)
     }
 }
 
