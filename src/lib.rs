@@ -96,7 +96,10 @@ mod caching_key_wrapper;
 pub use aes_gcm::{Aes128Gcm, Aes256Gcm, Key, KeySizeUser};
 pub use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
 
-pub use crate::errors::{DecryptionError, EncryptionError, KeyDecryptionError, KeyGenerationError};
+pub use crate::errors::{
+    DecryptionError, ERFromBytesError, ERToBytesError, EncryptionError, KeyDecryptionError,
+    KeyGenerationError,
+};
 pub use crate::key_provider::{DataKey, KeyProvider};
 pub use crate::simple_key_provider::SimpleKeyProvider;
 
@@ -124,12 +127,44 @@ pub struct EncryptedRecord {
 }
 
 impl EncryptedRecord {
-    pub fn to_vec(&self) -> serde_cbor::Result<Vec<u8>> {
-        serde_cbor::to_vec(&self)
+    pub fn to_vec(&self) -> Result<Vec<u8>, ERToBytesError> {
+        self.try_into()
     }
 
-    pub fn from_vec(vec: Vec<u8>) -> serde_cbor::Result<Self> {
-        serde_cbor::from_slice(&vec[..])
+    pub fn from_vec(vec: Vec<u8>) -> Result<Self, ERFromBytesError> {
+        vec.try_into()
+    }
+}
+
+impl TryFrom<&[u8]> for EncryptedRecord {
+    type Error = ERFromBytesError;
+
+    fn try_from(slice: &[u8]) -> Result<Self, Self::Error> {
+        Ok(serde_cbor::from_slice::<EncryptedRecord>(slice)?)
+    }
+}
+
+impl TryFrom<Vec<u8>> for EncryptedRecord {
+    type Error = ERFromBytesError;
+
+    fn try_from(vec: Vec<u8>) -> Result<Self, Self::Error> {
+        vec.as_slice().try_into()
+    }
+}
+
+impl TryFrom<&EncryptedRecord> for Vec<u8> {
+    type Error = ERToBytesError;
+
+    fn try_from(er: &EncryptedRecord) -> Result<Self, Self::Error> {
+        Ok(serde_cbor::to_vec(er)?)
+    }
+}
+
+impl TryFrom<EncryptedRecord> for Vec<u8> {
+    type Error = ERToBytesError;
+
+    fn try_from(er: EncryptedRecord) -> Result<Self, Self::Error> {
+        (&er).try_into()
     }
 }
 
@@ -384,31 +419,31 @@ mod tests {
 
         let provider: SimpleKeyProvider<Aes256Gcm> = SimpleKeyProvider::init([1; 16]);
         let provider: Box<dyn KeyProvider<Cipher = _>> = Box::new(provider);
-        let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
     }
 
     #[tokio::test]
     async fn test_encrypt_decrypt_128_gcm_siv() {
         let provider: SimpleKeyProvider<Aes128GcmSiv> = SimpleKeyProvider::init([1; 16]);
-        let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
 
         let provider: SimpleKeyProvider<Aes128GcmSiv> = SimpleKeyProvider::init([1; 16]);
         let provider: Box<dyn KeyProvider<Cipher = _>> = Box::new(provider);
-        let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
     }
 
     #[tokio::test]
     async fn test_encrypt_decrypt_256_gcm_siv() {
         let provider: SimpleKeyProvider<Aes256GcmSiv> = SimpleKeyProvider::init([1; 16]);
-        let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
 
         let provider: SimpleKeyProvider<Aes256GcmSiv> = SimpleKeyProvider::init([1; 16]);
         let provider: Box<dyn KeyProvider<Cipher = _>> = Box::new(provider);
-        let cipher: EnvelopeCipher<_, _> = EnvelopeCipher::init(provider);
+        let cipher: EnvelopeCipher<_> = EnvelopeCipher::init(provider);
         test_encrypt_decrypt(cipher).await;
     }
 

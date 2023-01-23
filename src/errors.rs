@@ -92,3 +92,11 @@ impl Default for KeyDecryptionError {
         Self::Unknown
     }
 }
+
+#[derive(Debug, Error)]
+#[error(transparent)]
+pub struct ERFromBytesError(#[from] serde_cbor::Error);
+
+#[derive(Debug, Error)]
+#[error(transparent)]
+pub struct ERToBytesError(#[from] serde_cbor::Error);
