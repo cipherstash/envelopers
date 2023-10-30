@@ -522,7 +522,7 @@ mod tests {
 
         assert_eq!(cache.provider.get_decrypt_count(), 1);
 
-        std::thread::sleep(Duration::from_millis(8));
+        std::thread::sleep(Duration::from_millis(5));
 
         assert!(cache
             .decrypt_data_key(&test_encrypt_bytes(&key, None), None)
