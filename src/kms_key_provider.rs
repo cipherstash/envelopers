@@ -3,10 +3,11 @@ use std::marker::PhantomData;
 use aes_gcm::{Aes128Gcm, Aes256Gcm, Key, KeySizeUser};
 use aes_gcm_siv::{Aes128GcmSiv, Aes256GcmSiv};
 use async_trait::async_trait;
-use aws_config::RetryConfig;
-use aws_sdk_kms::model::DataKeySpec;
-use aws_sdk_kms::types::Blob;
-use aws_sdk_kms::{Client, Config, Credentials, Region};
+use aws_config::retry::RetryConfig;
+use aws_sdk_kms::config::{Credentials, Region};
+use aws_sdk_kms::primitives::Blob;
+use aws_sdk_kms::types::DataKeySpec;
+use aws_sdk_kms::{Client, Config};
 
 use crate::errors::{KeyDecryptionError, KeyGenerationError};
 use crate::key_provider::{DataKey, KeyProvider};
@@ -47,7 +48,7 @@ impl<S: KeySizeUser> KMSKeyProvider<S> {
         let config = Config::builder()
             .region(Region::new(region.into()))
             .credentials_provider(aws_creds)
-            .retry_config(RetryConfig::new().with_max_attempts(5))
+            .retry_config(RetryConfig::standard().with_max_attempts(5))
             .build();
 
         let client = Client::from_conf(config);
@@ -148,7 +149,8 @@ define_kms_key_provider_impl!(Aes256GcmSiv, DataKeySpec::Aes256);
 mod tests {
 
     use aes_gcm::Aes128Gcm;
-    use aws_sdk_kms::{Client, Config, Credentials, Region};
+    use aws_sdk_kms::config::{Credentials, Region};
+    use aws_sdk_kms::{Client, Config};
     use aws_smithy_client::test_connection::TestConnection;
     use aws_smithy_http::body::SdkBody;
     use base64::encode;
@@ -186,11 +188,12 @@ mod tests {
         )]);
 
         let conf = Config::builder()
+            .http_connector(conn.clone())
             .region(Region::new("ap-southeast-2"))
             .credentials_provider(creds)
             .build();
 
-        let client = Client::from_conf_conn(conf, conn.clone());
+        let client = Client::from_conf(conf);
 
         callback(client).await;
 
@@ -322,7 +325,10 @@ mod tests {
                 match result {
                     Ok(_) => panic!("Expected result to be an error"),
                     Err(e) => {
-                        assert_eq!(e.to_string(), "KMS generate data key request failed: Error")
+                        assert_eq!(
+                            e.to_string(),
+                            "KMS generate data key request failed: service error"
+                        )
                     }
                 }
             },
