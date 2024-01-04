@@ -151,8 +151,8 @@ mod tests {
     use aes_gcm::Aes128Gcm;
     use aws_sdk_kms::config::{Credentials, Region};
     use aws_sdk_kms::{Client, Config};
-    use aws_smithy_client::test_connection::TestConnection;
-    use aws_smithy_http::body::SdkBody;
+    use aws_smithy_runtime::client::http::test_util::{ReplayEvent, StaticReplayClient};
+    use aws_smithy_types::body::SdkBody;
     use base64::encode;
     use core::future::Future;
     use http::{Request, Response, StatusCode};
@@ -176,19 +176,20 @@ mod tests {
             "test",
         );
 
-        let conn = TestConnection::new(vec![(
+        let event = ReplayEvent::new(
             Request::builder()
                 .uri("https://kms.ap-southeast-2.amazonaws.com")
                 .body(SdkBody::from(request_body.into()))
-                .expect("Failed to create request body"),
+                .unwrap(),
             Response::builder()
                 .status(StatusCode::from_u16(response_code).expect("Invalid status code"))
-                .body(response_body.into())
-                .expect("Failed to create response body"),
-        )]);
+                .body(SdkBody::from(response_body.into()))
+                .unwrap(),
+        );
 
+        let http_client = StaticReplayClient::new(vec![event]);
         let conf = Config::builder()
-            .http_connector(conn.clone())
+            .http_client(http_client.clone())
             .region(Region::new("ap-southeast-2"))
             .credentials_provider(creds)
             .build();
@@ -197,8 +198,8 @@ mod tests {
 
         callback(client).await;
 
-        assert_eq!(conn.requests().len(), 1);
-        conn.assert_requests_match(&[]);
+        assert_eq!(http_client.actual_requests().count(), 1);
+        http_client.assert_requests_match(&[]);
     }
 
     #[tokio::test]
