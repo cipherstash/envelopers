@@ -111,7 +111,7 @@ pub use crate::caching_key_wrapper::{CacheOptions, CachingKeyWrapper};
 
 use aes_gcm::aead::{Aead, Payload};
 use aes_gcm::{KeyInit, Nonce};
-use async_mutex::Mutex as AsyncMutex;
+use async_lock::Mutex as AsyncMutex;
 use rand_chacha::ChaChaRng;
 use serde::{Deserialize, Serialize};
 use static_assertions::assert_impl_all;
