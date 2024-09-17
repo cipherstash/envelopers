@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use aes_gcm::{Key, KeySizeUser};
-use async_mutex::Mutex as AsyncMutex;
+use async_lock::Mutex as AsyncMutex;
 use async_trait::async_trait;
 use lru::LruCache;
 use zeroize::ZeroizeOnDrop;
