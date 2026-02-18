@@ -328,7 +328,7 @@ mod tests {
                     Err(e) => {
                         assert_eq!(
                             e.to_string(),
-                            "KMS generate data key request failed: service error"
+                            "KMS generate data key request failed: dispatch failure"
                         )
                     }
                 }
