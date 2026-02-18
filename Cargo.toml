@@ -8,13 +8,13 @@ description = "A very simple envelope encryption library using aes-gcm"
 repository = "https://github.com/cipherstash/envelopers"
 
 [dev-dependencies]
-aws-smithy-runtime = { version = "1.1.1", features = ["client", "test-util"] }
-aws-smithy-types = "1.1.1"
+aws-smithy-runtime = { version = "1.10.2", features = ["client", "test-util"] }
+aws-smithy-types = "1.4.5"
 base64 = "0.13.0"
 futures = "0.3.21"
 hex = "0.4.3"
 hex-literal = "0.3.2"
-http = "0.2"
+http = "1.2"
 itertools = "0.10.3"
 tokio = { version = "1.38.2", features = ["macros", "rt-multi-thread"] }
 
@@ -23,13 +23,13 @@ aes-gcm = "0.10.1"
 aes-gcm-siv = "0.11.1"
 async-lock = "3.4.0"
 async-trait = "0.1.53"
-aws-config = { version = "1.1.1", optional = true, features = [
+aws-config = { version = "1.8.14", optional = true, features = [
     "behavior-version-latest",
 ] }
-aws-sdk-kms = { version = "1.9.0", optional = true, features = [
+aws-sdk-kms = { version = "1.102.0", optional = true, features = [
     "behavior-version-latest",
 ] }
-aws-smithy-runtime = "1.1.1"
+aws-smithy-runtime = "1.10.2"
 lru = "0.7.5"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
