@@ -32,6 +32,8 @@ jobs:
 
       - name: Install minimal nightly
         uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # nightly
+        with:
+          toolchain: nightly
 
       - name: "Test"
         run: |
@@ -60,6 +62,8 @@ jobs:
 
       - name: Install minimal nightly
         uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # nightly
+        with:
+          toolchain: nightly
 
       - name: "Benchmark"
         run: |
