@@ -1,7 +1,7 @@
 use aes_gcm::aead;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Default, Error, Debug)]
 pub enum EncryptionError {
     #[error("failed to encrypt payload")]
     AesEncryption,
@@ -9,14 +9,9 @@ pub enum EncryptionError {
     KeyGeneration(#[from] KeyGenerationError),
     #[error("failed to generate random bytes")]
     RngGeneration(#[from] rand::Error),
+    #[default]
     #[error("an unknown encryption error ocurred")]
     Unknown,
-}
-
-impl Default for EncryptionError {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 impl From<aead::Error> for EncryptionError {
@@ -25,20 +20,15 @@ impl From<aead::Error> for EncryptionError {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Default, Error, Debug)]
 pub enum DecryptionError {
     #[error("failed to decrypt payload")]
     AesDecryption,
     #[error("failed to decrypt data key")]
     KeyDecryption(#[from] KeyDecryptionError),
+    #[default]
     #[error("an unknown decryption error ocurred")]
     Unknown,
-}
-
-impl Default for DecryptionError {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 impl From<aead::Error> for DecryptionError {
@@ -47,7 +37,7 @@ impl From<aead::Error> for DecryptionError {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Default, Error)]
 pub enum KeyGenerationError {
     #[error("failed to generate random bytes")]
     RngGeneration(#[from] rand::Error),
@@ -55,6 +45,7 @@ pub enum KeyGenerationError {
     AesEncryption,
     #[error("{0}")]
     Other(String),
+    #[default]
     #[error("an unknown key generation error ocurred")]
     Unknown,
 }
@@ -65,18 +56,13 @@ impl From<aead::Error> for KeyGenerationError {
     }
 }
 
-impl Default for KeyGenerationError {
-    fn default() -> Self {
-        Self::Unknown
-    }
-}
-
-#[derive(Error, Debug)]
+#[derive(Default, Error, Debug)]
 pub enum KeyDecryptionError {
     #[error("failed to decrypt key")]
     AesDecryption,
     #[error("{0}")]
     Other(String),
+    #[default]
     #[error("an unknown key decryption error ocurred")]
     Unknown,
 }
@@ -84,12 +70,6 @@ pub enum KeyDecryptionError {
 impl From<aead::Error> for KeyDecryptionError {
     fn from(_: aead::Error) -> Self {
         Self::AesDecryption
-    }
-}
-
-impl Default for KeyDecryptionError {
-    fn default() -> Self {
-        Self::Unknown
     }
 }
 

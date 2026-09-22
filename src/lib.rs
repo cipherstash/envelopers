@@ -319,11 +319,11 @@ where
         Encrypt::new(self, msg).encrypt().await
     }
 
-    pub fn encrypt_with(&'a self, msg: &'a [u8]) -> Encrypt<K, R> {
+    pub fn encrypt_with(&'a self, msg: &'a [u8]) -> Encrypt<'a, K, R> {
         Encrypt::new(self, msg)
     }
 
-    pub fn decrypt_with(&'a self, encrypted_record: &'a EncryptedRecord) -> Decrypt<K, R> {
+    pub fn decrypt_with(&'a self, encrypted_record: &'a EncryptedRecord) -> Decrypt<'a, K, R> {
         Decrypt::new(self, encrypted_record)
     }
 }
