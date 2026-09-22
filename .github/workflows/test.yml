@@ -13,14 +13,41 @@ defaults:
     shell: bash -l {0}
 
 jobs:
-  test:
+  quality:
     runs-on: ubuntu-latest
-    name: "🧪 Test"
+    name: "🔍 Quality"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/cache@v4
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - name: "Check formatting"
+        run: cargo fmt --all -- --check
+
+      - name: "Clippy"
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: "Rustdoc"
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --all-features --no-deps
+
+  test:
+    runs-on: ubuntu-latest
+    name: "🧪 Test (${{ matrix.rust }})"
+    strategy:
+      matrix:
+        rust: ["1.94.1", stable]
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/bin/
@@ -28,10 +55,12 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ matrix.rust }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install Rust 1.97.1
-        uses: dtolnay/rust-toolchain@1.97.1
+      - name: Install Rust ${{ matrix.rust }}
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: ${{ matrix.rust }}
 
       - name: "Test"
         run: |
@@ -46,9 +75,9 @@ jobs:
     name: "⏱ Benchmark"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/bin/
@@ -58,8 +87,10 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install Rust 1.97.1
-        uses: dtolnay/rust-toolchain@1.97.1
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: stable
 
       - name: "Benchmark"
         run: |

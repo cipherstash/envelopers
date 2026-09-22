@@ -2,6 +2,7 @@
 name = "envelopers"
 version = "0.8.3"
 edition = "2021"
+rust-version = "1.94.1"
 license-file = "LICENSE"
 readme = "README.md"
 description = "A very simple envelope encryption library using aes-gcm"
