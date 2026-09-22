@@ -1,6 +1,6 @@
 # Issue tracker: Linear
 
-Issues and specs for this repo live in Linear, team **CIP**, labelled **`envelopers`**. Use the Linear MCP tools (claude.ai Linear connector) for all operations. If the tools aren't loaded or authenticated, load them and authenticate before proceeding; don't fall back to GitHub Issues.
+Issues and specs for this repo live in Linear, team **CIP**, labelled **`envelopers`**. Use the Linear MCP tools for all operations. If they aren't available or authenticated, set them up before proceeding; don't fall back to GitHub Issues.
 
 ## Conventions
 
