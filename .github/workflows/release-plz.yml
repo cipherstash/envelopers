@@ -1,0 +1,48 @@
+name: "Release-plz"
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  release-pr:
+    name: "Release-plz PR"
+    if: github.repository_owner == 'cipherstash'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: stable
+
+      - name: Generate GitHub App token
+        id: generate-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.RELEASE_PLZ_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PLZ_APP_PRIVATE_KEY }}
+
+      # Review the action SHA and CLI version together when upgrading. The action
+      # otherwise installs the latest CLI, which would make releases non-reproducible.
+      - name: Open or update release PR
+        uses: release-plz/action@b8d6b54b02889ff2ae2bb82e8b57c3a8fc1683a5 # v0.5.139
+        with:
+          command: release-pr
+          version: 0.3.169
+        env:
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
