@@ -4,11 +4,11 @@
 
 ### Issue tracker
 
-Issues live in Linear, team CIP, labelled `envelopers`. See `docs/agents/issue-tracker.md`.
+Issues live in GitHub Issues on `cipherstash/envelopers` (mirrored to Linear automatically). Commits, branches, PRs, and docs reference GitHub issues (`#123`), never Linear identifiers. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-Default five-role vocabulary as Linear labels in team CIP. See `docs/agents/triage-labels.md`.
+Default five-role vocabulary as GitHub labels. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 

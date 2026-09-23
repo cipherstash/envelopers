@@ -12,7 +12,7 @@ both the action commit and the release-plz CLI version.
 Do not enable publishing immediately. The repository initially declared
 `envelopers` 0.8.3 while the latest public documentation was for 0.8.2 and the
 repository had no `0.8.3` tag. That ambiguity was resolved when 0.8.3 was
-released on 2026-09-23 (confirmed by the maintainer in CIP-4131). Continue with
+released on 2026-09-23 (confirmed by the maintainer). Continue with
 the non-publishing observation phase before release-plz is allowed to publish.
 Cargo releases are effectively permanent and a published version cannot be
 overwritten
@@ -241,7 +241,7 @@ No change to `Cargo.toml` is required for release-plz itself. Optionally add
 ## Safe rollout
 
 1. **Reconcile 0.8.3.** Completed on 2026-09-23: the maintainer confirmed that
-   0.8.3 was released and closed CIP-4131.
+   0.8.3 was released.
 2. **Validate the package locally.** Run `cargo publish --dry-run`, which performs
    publishing checks without uploading, and inspect the generated package
    ([`cargo publish`](https://doc.rust-lang.org/cargo/commands/cargo-publish.html)).
@@ -265,7 +265,7 @@ No change to `Cargo.toml` is required for release-plz itself. Optionally add
 
 ## Implementation checklist
 
-- [x] Resolve the repository's unpublished-looking 0.8.3 state (CIP-4131).
+- [x] Resolve the repository's unpublished-looking 0.8.3 state.
 - [ ] Confirm crates.io `envelopers` ownership before configuring Trusted Publishing.
 - [ ] Run `cargo package --list` and `cargo publish --dry-run`.
 - [ ] Create a repository-scoped GitHub App with Contents/Pull requests RW.

@@ -14,4 +14,4 @@ When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the 
 
 Edit the right-hand column to match whatever vocabulary you actually use.
 
-In Linear these are team-level labels in team CIP; create them on first use. Applying `wontfix` also moves the issue to Canceled.
+These are GitHub repository labels; create them on first use with `gh label create`. Applying `wontfix` also closes the issue as not planned.
