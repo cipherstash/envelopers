@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.8.4](https://github.com/cipherstash/envelopers/compare/0.8.3...0.8.4) - 2026-09-23
+
+### Other
+
+- *(agents)* track issues in GitHub instead of Linear
+- record envelopers 0.8.3 release
+- *(cip-4132)* add release-plz observation workflow
+
 ## [0.8.3]
 
 ### Security
