@@ -29,6 +29,9 @@ jobs:
       - name: "Check formatting"
         run: cargo fmt --all -- --check
 
+      - name: "Check release workflow invariants"
+        run: bash scripts/check-release-workflow.sh
+
       - name: "Clippy"
         run: cargo clippy --all-targets --all-features -- -D warnings
 

@@ -187,7 +187,7 @@ Continue the repository's existing Dependabot/update process for those pins.
 As of 2026-09-22, suitable reviewed references are:
 
 - `release-plz/action@b8d6b54b02889ff2ae2bb82e8b57c3a8fc1683a5` (`v0.5.139` action tag line).
-- `actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349` (`v2`).
+- `actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1` (`v3.2.0`).
 - The checkout and Rust toolchain SHAs already used by `test.yml`.
 
 Also set `with: version: 0.3.169` (the current release on the research date) on
