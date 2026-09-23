@@ -19,6 +19,8 @@ assert_count() {
 assert_count 1 "permissions:"
 assert_count 1 "  contents: read"
 assert_count 1 "      id-token: write"
+assert_count 1 "    environment: release"
+assert_count 2 '          client-id: ${{ vars.RELEASE_PLZ_APP_CLIENT_ID }}'
 assert_count 1 "          command: release"
 assert_count 1 "          command: release-pr"
 assert_count 2 "        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0"

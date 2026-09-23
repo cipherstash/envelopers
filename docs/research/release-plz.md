@@ -127,8 +127,8 @@ requests read/write. Administration read/write is needed only if protected tags
 require it
 ([release-plz GitHub token guide](https://release-plz.dev/docs/github/token)).
 
-Store the App ID as an Actions variable or secret and its private key as an
-Actions secret (for example, `RELEASE_PLZ_APP_ID` and
+Store the App's Client ID as an Actions variable or secret and its private key as an
+Actions secret (for example, `RELEASE_PLZ_APP_CLIENT_ID` and
 `RELEASE_PLZ_APP_PRIVATE_KEY`). Generate a short-lived installation token with
 `actions/create-github-app-token` and pass that token as `GITHUB_TOKEN` to both
 release-plz jobs. A fine-grained PAT can also trigger CI, but it is a long-lived
