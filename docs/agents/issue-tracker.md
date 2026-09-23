@@ -1,17 +1,17 @@
-# Issue tracker: Linear
+# Issue tracker: GitHub Issues
 
-Issues and specs for this repo live in Linear, team **CIP**, labelled **`envelopers`**. Use the Linear MCP tools for all operations. If they aren't available or authenticated, set them up before proceeding; don't fall back to GitHub Issues.
+Issues and specs for this repo live in GitHub Issues on `cipherstash/envelopers`. Use the `gh` CLI for all operations. Linear (team CIP) mirrors these issues automatically; never create or edit issues in Linear directly, and never reference Linear identifiers (`CIP-1234`) in commits, branches, PRs, or docs.
 
 ## Conventions
 
-- **Create an issue**: create in team CIP with the `envelopers` label. Put the spec or description in the issue description as markdown.
-- **Read an issue**: fetch by identifier (e.g. `CIP-3794`), including comments, labels, state, and relations.
-- **List issues**: filter by team CIP, label `envelopers`, and state (open = not Done/Canceled), plus any triage label.
-- **Comment on an issue**: add a comment to the issue.
-- **Apply / remove labels**: update the issue's labels. Create a label in team CIP if it doesn't exist yet.
-- **Close**: move to the team's Done state with a closing comment. For wontfix, move to Canceled.
+- **Create an issue**: `gh issue create --title "..." --body-file <file>`. Put the spec or description in the body as markdown.
+- **Read an issue**: `gh issue view <number> --comments`.
+- **List issues**: `gh issue list --state open`, plus `--label <triage-label>` as needed.
+- **Comment on an issue**: `gh issue comment <number> --body-file <file>`.
+- **Apply / remove labels**: `gh issue edit <number> --add-label <label>` / `--remove-label <label>`. Create a missing label with `gh label create <label>`.
+- **Close**: `gh issue close <number> --comment "..."`. For wontfix, use `--reason "not planned"`.
 
-Issues are referenced by identifier (`CIP-1234`). Branch names and commit messages include the lowercased identifier (e.g. `fix/cip-3794-stable-rust`) so Linear links branches and PRs automatically.
+Issues are referenced as `#123`. Branch names include the issue number (e.g. `fix/123-stable-rust`). Commit messages reference the issue in the subject scope or body (e.g. `fix(ci): pin toolchain (#123)`), and PR descriptions use `Closes #123` so merging closes the issue.
 
 ## Pull requests as a triage surface
 
@@ -19,19 +19,19 @@ Issues are referenced by identifier (`CIP-1234`). Branch names and commit messag
 
 ## When a skill says "publish to the issue tracker"
 
-Create a Linear issue in team CIP with the `envelopers` label.
+Create a GitHub issue with `gh issue create`.
 
 ## When a skill says "fetch the relevant ticket"
 
-Fetch the Linear issue by identifier, with comments.
+`gh issue view <number> --comments`.
 
 ## Wayfinding operations
 
 Used by `/wayfinder`. The **map** is a single parent issue with **sub-issues** as tickets.
 
-- **Map**: a Linear issue labelled `envelopers` and `wayfinder:map`, holding the Notes / Decisions-so-far / Fog description.
-- **Child ticket**: a sub-issue of the map (set its parent to the map). Labels: `envelopers` plus `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, the ticket is assigned to the driving dev.
-- **Blocking**: Linear's native "blocked by" relation. A ticket is unblocked when every blocker is Done or Canceled.
+- **Map**: a GitHub issue labelled `wayfinder:map`, holding the Notes / Decisions-so-far / Fog description.
+- **Child ticket**: a sub-issue of the map (GraphQL `addSubIssue` via `gh api graphql`). Label: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, the ticket is assigned to the driving dev.
+- **Blocking**: GitHub's native "blocked by" issue dependency (GraphQL `addBlockedBy`). A ticket is unblocked when every blocker is closed.
 - **Frontier query**: list the map's open sub-issues, drop any with an open blocker or an assignee; first in map order wins.
-- **Claim**: assign the issue to me, the session's first write.
-- **Resolve**: comment the answer, move to Done, then append a context pointer (gist + identifier) to the map's Decisions-so-far.
+- **Claim**: `gh issue edit <number> --add-assignee @me`, the session's first write.
+- **Resolve**: comment the answer, close the issue, then append a context pointer (gist + `#number`) to the map's Decisions-so-far.
