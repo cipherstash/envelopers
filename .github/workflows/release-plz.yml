@@ -12,15 +12,18 @@ permissions:
 jobs:
   release:
     name: "Release-plz release"
+    # workflow_dispatch is excluded: publishing must follow a merged release PR.
     if: >-
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
       github.repository == 'cipherstash/envelopers'
     runs-on: ubuntu-latest
+    # No concurrency group, unlike release-pr: GitHub keeps only one pending run
+    # per group and would drop the run that publishes a just-merged release PR.
     environment: release
+    # release-plz uses the GitHub App token, so the default token stays read-only.
     permissions:
-      contents: write
-      pull-requests: read
+      contents: read
       id-token: write
 
     steps:
@@ -54,7 +57,7 @@ jobs:
 
   release-pr:
     name: "Release-plz PR"
-    if: github.repository_owner == 'cipherstash'
+    if: github.repository == 'cipherstash/envelopers'
     runs-on: ubuntu-latest
     permissions:
       contents: write
