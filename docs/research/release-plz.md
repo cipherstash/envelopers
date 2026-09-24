@@ -127,8 +127,8 @@ requests read/write. Administration read/write is needed only if protected tags
 require it
 ([release-plz GitHub token guide](https://release-plz.dev/docs/github/token)).
 
-Store the App ID as an Actions variable or secret and its private key as an
-Actions secret (for example, `RELEASE_PLZ_APP_ID` and
+Store the App's Client ID as an Actions variable or secret and its private key as an
+Actions secret (for example, `RELEASE_PLZ_APP_CLIENT_ID` and
 `RELEASE_PLZ_APP_PRIVATE_KEY`). Generate a short-lived installation token with
 `actions/create-github-app-token` and pass that token as `GITHUB_TOKEN` to both
 release-plz jobs. A fine-grained PAT can also trigger CI, but it is a long-lived
@@ -178,7 +178,7 @@ that should publish a just-merged release PR
 ([release-plz single-job/concurrency guidance](https://release-plz.dev/docs/extra/single-job-workflow),
 [GitHub concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)).
 
-Add `if: github.repository_owner == 'cipherstash'` to both jobs so a copied
+Add `if: github.repository == 'cipherstash/envelopers'` to both jobs so a copied
 workflow cannot attempt releases from a fork. Pin every action to a full commit
 SHA: GitHub says this is the only immutable action reference
 ([GitHub secure use reference](https://docs.github.com/en/actions/reference/security/secure-use)).
@@ -187,7 +187,7 @@ Continue the repository's existing Dependabot/update process for those pins.
 As of 2026-09-22, suitable reviewed references are:
 
 - `release-plz/action@b8d6b54b02889ff2ae2bb82e8b57c3a8fc1683a5` (`v0.5.139` action tag line).
-- `actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349` (`v2`).
+- `actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1` (`v3.2.0`).
 - The checkout and Rust toolchain SHAs already used by `test.yml`.
 
 Also set `with: version: 0.3.169` (the current release on the research date) on
@@ -221,13 +221,17 @@ Base it on the official two-job quickstart, with these repository-specific
 changes:
 
 - Trigger only on `push` to `main`, plus `workflow_dispatch` for controlled
-  validation if desired.
+  validation if desired. The publish job ignores `workflow_dispatch`; only the
+  release-PR job runs on it.
 - Use the GitHub App token in both jobs.
 - Give the release job the `release` environment and `id-token: write` for
   crates.io Trusted Publishing.
+- Run the release job only when the push merged a release-plz PR, checked by a
+  read-only gate job, so ordinary merges to `main` do not create a pending
+  `release` deployment that needs approval.
 - Pin action SHAs and `with: version`.
 - Add release-PR concurrency only, with `cancel-in-progress: false`.
-- Add the repository-owner guard to both jobs.
+- Add the repository guard to both jobs.
 - Set `command: release` and `command: release-pr` explicitly.
 
 Use separate token-generation steps in the two jobs; outputs and filesystem
@@ -268,18 +272,18 @@ No change to `Cargo.toml` is required for release-plz itself. Optionally add
 - [x] Resolve the repository's unpublished-looking 0.8.3 state.
 - [ ] Confirm crates.io `envelopers` ownership before configuring Trusted Publishing.
 - [ ] Run `cargo package --list` and `cargo publish --dry-run`.
-- [ ] Create a repository-scoped GitHub App with Contents/Pull requests RW.
-- [ ] Add App ID/private-key credentials to GitHub Actions.
-- [ ] Create and protect the `release` GitHub Environment.
-- [ ] Configure crates.io Trusted Publishing for
+- [x] Create a repository-scoped GitHub App with Contents/Pull requests RW.
+- [x] Add App Client ID/private-key credentials to GitHub Actions.
+- [x] Create and protect the `release` GitHub Environment.
+- [x] Configure crates.io Trusted Publishing for
       `cipherstash/envelopers`, workflow `release-plz.yml`, environment
       `release`.
-- [ ] Add `release-plz.toml` with `release_always = false`.
-- [ ] Add the SHA-pinned release-PR job and observe its generated PR first.
+- [x] Add `release-plz.toml` with `release_always = false`.
+- [x] Add the SHA-pinned release-PR job and observe its generated PR first.
 - [ ] Ensure release PRs trigger `test.yml` and retain ordinary review rules.
 - [ ] Add CI job names as required ruleset checks if CI is intended to be a
       true merge gate.
-- [ ] Add the separate Trusted Publishing release job after observation.
-- [ ] Pin and record both action SHA and release-plz CLI version.
+- [x] Add the separate Trusted Publishing release job after observation.
+- [x] Pin and record both action SHA and release-plz CLI version.
 - [ ] Adopt Conventional Commit-compatible squash PR titles.
 - [ ] Verify crates.io, tag, GitHub Release, and changelog after the first run.
