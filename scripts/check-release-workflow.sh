@@ -24,8 +24,14 @@ check() {
 check "top-level permissions are exactly contents: read" \
   '.permissions | (length == 1 and .contents == "read")'
 
-check "release job is gated to push on main in cipherstash/envelopers" \
-  '(.jobs.release.if | sub("\s+"; " ")) == "github.event_name == '"'push'"' && github.ref == '"'refs/heads/main'"' && github.repository == '"'cipherstash/envelopers'"'"'
+check "release-gate job is gated to push on main in cipherstash/envelopers" \
+  '(.jobs."release-gate".if | sub("\s+"; " ")) == "github.event_name == '"'push'"' && github.ref == '"'refs/heads/main'"' && github.repository == '"'cipherstash/envelopers'"'"'
+
+check "release-gate job only reads the repository and pull requests" \
+  '.jobs."release-gate".permissions | (length == 2 and .contents == "read" and ."pull-requests" == "read")'
+
+check "release job needs release-gate and runs only for a merged release PR pushed to main" \
+  '.jobs.release.needs == "release-gate" and (.jobs.release.if | sub("\s+"; " ")) == "needs.release-gate.outputs.release == '"'true'"' && github.event_name == '"'push'"' && github.ref == '"'refs/heads/main'"' && github.repository == '"'cipherstash/envelopers'"'"'
 
 check "release job binds the release environment" \
   '.jobs.release.environment == "release"'

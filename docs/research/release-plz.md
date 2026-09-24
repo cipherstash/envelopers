@@ -226,6 +226,9 @@ changes:
 - Use the GitHub App token in both jobs.
 - Give the release job the `release` environment and `id-token: write` for
   crates.io Trusted Publishing.
+- Run the release job only when the push merged a release-plz PR, checked by a
+  read-only gate job, so ordinary merges to `main` do not create a pending
+  `release` deployment that needs approval.
 - Pin action SHAs and `with: version`.
 - Add release-PR concurrency only, with `cancel-in-progress: false`.
 - Add the repository guard to both jobs.

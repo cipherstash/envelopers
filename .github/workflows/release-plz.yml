@@ -10,10 +10,54 @@ permissions:
   contents: read
 
 jobs:
-  release:
-    name: "Release-plz release"
+  # Decides whether this push merged a release PR. Only then does the release
+  # job run and ask the release environment's reviewers for approval; other
+  # pushes to main skip it without creating a pending deployment.
+  release-gate:
+    name: "Release-plz release gate"
     # workflow_dispatch is excluded: publishing must follow a merged release PR.
     if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'cipherstash/envelopers'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      release: ${{ steps.check.outputs.release }}
+
+    steps:
+      - name: Check for a merged release PR
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          # The commit-to-PR association can lag the push briefly, so retry
+          # while GitHub reports no PR for the commit at all.
+          for _ in 1 2 3; do
+            prs="$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls")"
+            if [[ "$(jq length <<<"$prs")" -gt 0 ]]; then
+              break
+            fi
+            sleep 10
+          done
+          release="$(jq '[.[] | select(
+            .merged_at != null and
+            .base.ref == "main" and
+            .head.repo.full_name == "cipherstash/envelopers" and
+            (.head.ref | startswith("release-plz-")) and
+            .user.login == "cipherstash-envelopers-release-plz[bot]"
+          )] | length > 0' <<<"$prs")"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: "Release-plz release"
+    needs: release-gate
+    # The push guard is repeated so the release job stays safe on its own.
+    if: >-
+      needs.release-gate.outputs.release == 'true' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
       github.repository == 'cipherstash/envelopers'
