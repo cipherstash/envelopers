@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.8.4](https://github.com/cipherstash/envelopers/compare/0.8.3...0.8.4) - 2026-09-28
+
+### Other
+
+- Merge pull request #65 from cipherstash/chore/cip-4135-enable-trusted-publishing
+- publish only when a release PR merges
+- check release workflow structurally and drop publish job write token
+- use app client-id and check release environment binding
+- harden release workflow invariants
+- *(cip-4135)* enable trusted publishing
+- record envelopers 0.8.3 release
+- *(cip-4132)* add release-plz observation workflow
+
 ## [0.8.3]
 
 ### Security
