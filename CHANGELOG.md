@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.8.5](https://github.com/cipherstash/envelopers/compare/0.8.4...0.8.5) - 2026-11-24
+
+### Other
+
+- keep Dependabot off dtolnay/rust-toolchain, which tracks a branch rather than releases
+- keep Dependabot off release-plz/action, whose pin must move with the CLI version
+- call the shared Claude review workflow, pinned to v1.0.0
+- request a Claude code review when a pull request is ready
+
 ## [0.8.4](https://github.com/cipherstash/envelopers/compare/0.8.3...0.8.4) - 2026-09-28
 
 ### Other
