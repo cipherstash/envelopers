@@ -1,0 +1,18 @@
+# Keeps the actions this repository's workflows use up to date, including the pinned commit of the shared Claude review
+# workflow in .github/workflows/claude-review.yml.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Waits 7 days after a release before proposing it, so a bad release has time to be found first.
+    cooldown:
+      default-days: 7
+    ignore:
+      # The action's commit and the release-plz CLI `version:` it installs (release-plz.yml) must move together (see
+      # docs/adr/0001-automate-releases-with-release-plz.md). Dependabot would move only the commit, so upgrade both by hand.
+      - dependency-name: "release-plz/action"
+      # Pinned to a commit on its master branch, which has no releases, so Dependabot would offer a bump whenever master
+      # moves. Updated by hand instead.
+      - dependency-name: "dtolnay/rust-toolchain"
